@@ -1,0 +1,21 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: metalco-backend-ingress
+  namespace: metalco-backend
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+    nginx.ingress.kubernetes.io/proxy-body-size: "20m"
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: gc-dev.centralindia.cloudapp.azure.com
+      http:
+        paths:
+          - path: /api/metalco
+            pathType: Prefix
+            backend:
+              service:
+                name: metalco-backend-svc
+                port:
+                  number: 80

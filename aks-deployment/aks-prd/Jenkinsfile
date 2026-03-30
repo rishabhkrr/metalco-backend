@@ -1,0 +1,88 @@
+pipeline {
+  agent any
+
+  environment {
+    APP_NAME = 'Metalco'
+    ACR_LOGIN_SERVER = 'gembaprdregistry.azurecr.io'
+    IMAGE_NAME = "gembaprdregistry.azurecr.io/metalco-backend"
+    RESOURCE_GROUP = 'production'
+    AKS_CLUSTER = 'gemba-prd'
+  }
+
+  tools {
+    jdk 'jdk21'
+    maven 'maven_3_9_12'
+  }
+
+  stages {
+    stage('Checkout Code') {
+      steps {
+        checkout([
+          $class: 'GitSCM',
+          branches: [[name: 'aks-prd']],
+          extensions: [[$class: 'CleanBeforeCheckout']],
+          userRemoteConfigs: [[
+            url: 'https://gitlab.gembaconnect.in/client-projects/metalco/metalco-backend.git',
+            credentialsId: 'gitlab-credentials'
+          ]]
+        ])
+      }
+    }
+
+    stage('Determine Image Tag') {
+      steps {
+        script {
+          IMAGE_TAG = sh(script: "git rev-parse --short HEAD", returnStdout: true).trim()
+        }
+      }
+    }
+
+    stage('Build Docker Image') {
+      steps {
+        sh "docker build -t ${IMAGE_NAME}:${IMAGE_TAG} -t ${IMAGE_NAME}:latest -f aks-deployment/aks-prd/Dockerfile ."
+      }
+    }
+
+    stage('Push Image to ACR') {
+      steps {
+        withCredentials([usernamePassword(
+          credentialsId: 'acr-creds-prd',
+          usernameVariable: 'ACR_USER',
+          passwordVariable: 'ACR_PASS'
+        )]) {
+          sh "docker login ${ACR_LOGIN_SERVER} -u $ACR_USER -p $ACR_PASS"
+          sh "docker push ${IMAGE_NAME}:${IMAGE_TAG}"
+          sh "docker push ${IMAGE_NAME}:latest"
+        }
+      }
+    }
+
+    stage('Deploy to AKS') {
+      steps {
+        withCredentials([
+          string(credentialsId: 'AZURE_CLIENT_ID_PROD', variable: 'AZURE_CLIENT_ID_PROD'),
+          string(credentialsId: 'AZURE_CLIENT_SECRET_PROD', variable: 'AZURE_CLIENT_SECRET_PROD'),
+          string(credentialsId: 'AZURE_TENANT_ID', variable: 'AZURE_TENANT_ID'),
+          string(credentialsId: 'AZURE_SUBSCRIPTION_ID', variable: 'AZURE_SUBSCRIPTION_ID')
+        ]) {
+          sh '''
+            az login --service-principal -u $AZURE_CLIENT_ID_PROD -p $AZURE_CLIENT_SECRET_PROD --tenant $AZURE_TENANT_ID
+            az account set --subscription $AZURE_SUBSCRIPTION_ID
+            az aks get-credentials --resource-group production --name gemba-prd --overwrite-existing
+          '''
+
+          sh 'kubectl get ns metalco-backend || kubectl create ns metalco-backend'
+          sh 'kubectl apply -f aks-deployment/aks-prd/deployment.yaml -n metalco-backend'
+          sh "kubectl set image deployment/metalco-backend-deployment metalco-backend=${IMAGE_NAME}:${IMAGE_TAG} -n metalco-backend"
+          sh 'kubectl rollout status deployment/metalco-backend-deployment -n metalco-backend'
+        }
+      }
+    }
+
+    stage('Apply Ingress') {
+      steps {
+        sh 'kubectl apply -f aks-deployment/aks-prd/ingress.yaml -n metalco-backend'
+      }
+    }
+  }
+}

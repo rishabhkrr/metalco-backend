@@ -1,0 +1,38 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: metalco-backend-deployment
+  namespace: metalco-backend
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: metalco-backend
+  template:
+    metadata:
+      labels:
+        app: metalco-backend
+    spec:
+      containers:
+        - name: metalco-backend
+          image: gemba.azurecr.io/metalco-backend:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8089
+      imagePullSecrets:
+        - name: acr-creds
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: metalco-backend-svc
+  namespace: metalco-backend
+spec:
+  selector:
+    app: metalco-backend
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 8089
+  type: ClusterIP

@@ -1,0 +1,27 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: metalco-backend-ingress
+  namespace: metalco-backend
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    kubernetes.io/ingress.class: nginx
+    nginx.ingress.kubernetes.io/proxy-body-size: "20m"
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - metalco-backend.gembaconnect.in
+      secretName: metalco-backend-tls
+  rules:
+    - host: metalco-backend.gembaconnect.in
+      http:
+        paths:
+          - path: /api/metalco
+            pathType: Prefix
+            backend:
+              service:
+                name: metalco-backend-svc
+                port:
+                  number: 80
