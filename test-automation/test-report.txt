@@ -1,0 +1,475 @@
+════════════════════════════════════════════════════════════════════════════════
+   MetalCo ERP - Full Application Test Report
+   Generated: 31/3/2026, 6:21:52 pm
+════════════════════════════════════════════════════════════════════════════════
+
+┌──────────────────────────────────────────────────────────────┐
+│  OVERALL SUMMARY                                           │
+├──────────────────────────────────────────────────────────────┤
+│  Total Tests:      145                                      │
+│  ✅ Passed:        122                                      │
+│  ❌ Failed:         23                                      │
+│  Pass Rate:       84.1%                                    │
+├──────────────────────────────────────────────────────────────┤
+│  Frontend Routes:  91 /  91 passed                           │
+│  Backend APIs:     31 /  54 passed                           │
+└──────────────────────────────────────────────────────────────┘
+
+────────────────────────────────────────────────────────────────────────────────
+  FRONTEND ROUTE TESTS
+────────────────────────────────────────────────────────────────────────────────
+
+  📦 Authentication  [1/1]
+     ✅ Login Page                                 /#/signin
+
+  📦 Dashboard  [1/1]
+     ✅ Admin Dashboard                            /#/dashboard
+
+  📦 Masters  [14/14]
+     ✅ Customer Master                            /#/data/customers
+     ✅ Supplier Master                            /#/data/supplier
+     ✅ Item Master                                /#/data/items
+     ✅ Sub-Contractor Master                      /#/data/sub-contractor
+     ✅ Unit Master                                /#/data/unit
+     ✅ Rack & Bin Master                          /#/data/rack-and-bin
+     ✅ User Master                                /#/data/user
+     ✅ Salesman Master                            /#/data/salesman
+     ✅ Machine Master                             /#/data/machine
+     ✅ Nalco Price                                /#/data/nalco-price
+     ✅ Hindalco Price                             /#/data/hindalco-price
+     ✅ Process Flow                               /#/data/process-flow
+     ✅ HSN Code                                   /#/data/hsn-code
+     ✅ Product Margin                             /#/data/product-margin
+
+  📦 Item Inquiry  [3/3]
+     ✅ Quotation Creation                         /#/data/quotation-creation
+     ✅ Quotation Summary                          /#/data/quotation-summary
+     ✅ New Customer Verification                  /#/data/new-customer-verification
+
+  📦 Sales Order  [7/7]
+     ✅ SO Customer Approval                       /#/data/sales-order-customer-approval
+     ✅ SO Creation                                /#/data/sales-order-creation
+     ✅ SO Summary                                 /#/data/sales-order-summary
+     ✅ SO Creation (Customer)                     /#/data/so-creation-customer
+     ✅ SO Update (Customer)                       /#/data/so-update-customer
+     ✅ SO Approval Overdue                        /#/data/so-approval-overdue-customer
+     ✅ SO Approval Pending                        /#/data/so-approval-pending
+
+  📦 Purchase Order  [9/9]
+     ✅ PO Creation                                /#/data/purchase-order-creation
+     ✅ PO Summary                                 /#/data/purchase-order-summary
+     ✅ PO Generation                              /#/data/purchase-order-generation
+     ✅ PO Summary Overall                         /#/data/purchase-order-summary-overall
+     ✅ PO Mgmt Approval                           /#/data/purchase-order-management-approval
+     ✅ ABC Summary                                /#/data/abc-summary
+     ✅ Purchase Follow-up                         /#/data/purchase-follow-up-new-sales-order
+     ✅ Inter-Unit Material Request                /#/data/inter-unit-material-request
+     ✅ Inter-Unit Material Req Summary            /#/data/inter-unit-material-request-summary
+
+  📦 Warehousing (Inward)  [22/22]
+     ✅ Gate Entry - Inward Security               /#/data/gate-entry-inward-security
+     ✅ Gate Entry - Inward Summary                /#/data/gate-entry-inward-security-summary
+     ✅ Vehicle Weighment                          /#/data/vehicle-weighment
+     ✅ Vehicle Weighment Form                     /#/data/vehicle-weighment-form
+     ✅ Vehicle Weighment Form (New)               /#/data/vehicle-weighment-form-new
+     ✅ GRN - Purchase                             /#/data/grn
+     ✅ GRN - Purchase Summary                     /#/data/grn-summary
+     ✅ GRN - Job Work                             /#/data/grn-job-work
+     ✅ GRN - Job Work Summary                     /#/data/grn-jobwork-summary
+     ✅ GRN - Inter-Unit Request                   /#/data/grn-inter-unit-material-request
+     ✅ GRN - Inter-Unit Req Summary               /#/data/grn-inter-unit-material-request-summary
+     ✅ Stock Transfer - All                       /#/data/stock-transfer-all
+     ✅ Stock Transfer - All Summary               /#/data/stock-transfer-all-summary
+     ✅ Stock Summary (Inventory-wise)             /#/data/stock-summary-inventorywise
+     ✅ SO Schedule Warehouse Pick List            /#/data/sales-order-schedule-warehouse-pick-list
+     ✅ IUMT Schedule Warehouse Pick               /#/data/iu-material-transfer-schedule-warehouse-pick-list
+     ✅ IUMT Stock Transfer Warehouse              /#/data/iumt-stock-transfer-warehouse
+     ✅ Sales Return                               /#/data/sales-return
+     ✅ Sales Return Summary                       /#/data/sales-return-summery
+     ✅ Purchase Return                            /#/data/purchase-return
+     ✅ Purchase Return Summary                    /#/data/purchase-return-summery
+     ✅ Store Material Transfer Summary            /#/data/store-material-transfer-summary
+
+  📦 Production  [7/7]
+     ✅ Production Schedule                        /#/data/production-schedule
+     ✅ Production Entry                           /#/data/production-entry
+     ✅ Production Summary                         /#/data/production-summary
+     ✅ Scrap Summary                              /#/data/scrap-summary
+     ✅ Production Idle Time Entry                 /#/data/production-idle-time-entry
+     ✅ Machine Idle Time Summary                  /#/data/machine-idle-time-summary
+     ✅ Machine Maintenance Activity               /#/data/machine-maintenance-activity
+
+  📦 Packing & Dispatch  [10/10]
+     ✅ Gate Entry - Outward Security              /#/data/gate-entry-outward-security
+     ✅ Gate Entry - Outward Summary               /#/data/gate-entry-outward-security-summary
+     ✅ Packing Schedule                           /#/data/packing-schedule
+     ✅ Packing                                    /#/data/packing
+     ✅ Packing Summary                            /#/data/packing-summary
+     ✅ Packing List Transfer                      /#/data/packing-list-transfer
+     ✅ Packing List Summary                       /#/data/packing-list-summary
+     ✅ Billing                                    /#/data/billing
+     ✅ Billing Summary                            /#/data/billing-summary
+     ✅ SO Summary All                             /#/data/so-summary-all
+
+  📦 Job Work  [5/5]
+     ✅ Packing List - Job Work                    /#/data/packing-list-creation-jobwork
+     ✅ Packing List - JW Summary                  /#/data/packinglist-jobwork-summary
+     ✅ DC Creation - Job Work                     /#/data/dc-creation-jobwork
+     ✅ DC Job Work Summary                        /#/data/dc-jobwork-summary
+     ✅ Job Work Summary                           /#/data/job-work-summary
+
+  📦 Inter Unit Material Transfer  [5/5]
+     ✅ Packing List - IUMT                        /#/data/packing-list-creation-iumt
+     ✅ Packing List Summary - IUMT                /#/data/packing-list-summary-iumt
+     ✅ DC Creation - IUMT                         /#/data/dc-creation-iumt
+     ✅ DC Summary - IUMT                          /#/data/dc-summary-iumt
+     ✅ IUMT Summary                               /#/data/interunit-material-transfer-summary
+
+  📦 Certificate & Notes  [5/5]
+     ✅ Certificate of Conformance                 /#/data/certificate-of-conformance
+     ✅ Credit/Debit Note - Sales                  /#/data/credit-debit-note-sales
+     ✅ Credit/Debit Note - Sales Summary          /#/data/credit-debit-notes-sales-summery
+     ✅ Credit/Debit Note - Purchase               /#/data/credit-debit-note-purchase
+     ✅ Credit/Debit Note - Purchase Summary       /#/data/credit-debit-notes-purchase-summery
+
+  📦 Reports  [2/2]
+     ✅ Salesman Incentives                        /#/data/salesman-incentives
+     ✅ Machine OEE Report                         /#/data/machine-oee-report
+
+────────────────────────────────────────────────────────────────────────────────
+  BACKEND API TESTS
+────────────────────────────────────────────────────────────────────────────────
+
+  ✅ [POST] 200   Auth - Login                        OK
+  ✅ [GET ] 200   Customer Master API                 OK
+  ✅ [GET ] 200   Item Master API                     OK
+  ✅ [GET ] 200   Unit Master API                     OK
+  ✅ [GET ] 200   Rack Bin Master API                 OK
+  ✅ [GET ] 200   User Master API                     OK
+  ✅ [GET ] 200   Salesman Master API                 OK
+  ✅ [GET ] 200   Machine Master API                  OK
+  ✅ [GET ] 200   HSN Code API                        OK
+  ✅ [GET ] 200   Hindalco Price API                  OK
+  ✅ [GET ] 200   Nalco Price API                     OK
+  ✅ [GET ] 200   Process Flow API                    OK
+  ✅ [GET ] 200   Sub-Contractor API                  OK
+  ✅ [GET ] 200   Sales Order API                     OK
+  ✅ [GET ] 200   SO Summary API                      OK
+  ✅ [GET ] 200   PO Generation API                   OK
+  ✅ [GET ] 200   PO Approval API                     OK
+  ✅ [GET ] 200   Purchase Follow-Up API              OK
+  ✅ [GET ] 200   GRN API                             OK
+  ✅ [GET ] 200   GRN Job Work API                    OK
+  ✅ [GET ] 200   Stock Transfer API                  OK
+  ✅ [GET ] 200   Production Schedule API             OK
+  ✅ [GET ] 200   Production Entry API                OK
+  ✅ [GET ] 200   Packing List API                    OK
+  ✅ [GET ] 200   Packing Scheduler API               OK
+  ✅ [GET ] 200   Billing Summary API                 OK
+  ✅ [GET ] 200   Packing List IUMT API               OK
+  ✅ [GET ] 200   Packing List Job Work API           OK
+  ✅ [GET ] 200   DC Job Work API                     OK
+  ✅ [GET ] 200   DC IUMT API                         OK
+  ✅ [GET ] 200   Purchase Return API                 OK
+  ❌ [GET ] 400   Supplier Master API                 HTTP 400
+  ❌ [GET ] 405   Product Margin API                  HTTP 405
+  ❌ [GET ] 404   Dashboard API                       Endpoint not found (404)
+  ❌ [GET ] 400   Item Enquiry API                    HTTP 400
+  ❌ [GET ] 400   Purchase Order (PO) API             HTTP 400
+  ❌ [GET ] 404   ABC Summary API                     Endpoint not found (404)
+  ❌ [GET ] 400   Material Request API                HTTP 400
+  ❌ [GET ] 400   Gate Entry Inward API               HTTP 400
+  ❌ [GET ] 400   Vehicle Weighment API               HTTP 400
+  ❌ [GET ] 404   GRN Summary API                     Endpoint not found (404)
+  ❌ [GET ] 400   GRN Inter-Unit API                  HTTP 400
+  ❌ [GET ] 400   Stock Summary API                   HTTP 400
+  ❌ [GET ] 404   Rack Bin Eligible API               Endpoint not found (404)
+  ❌ [GET ] 400   Stock In API                        HTTP 400
+  ❌ [GET ] 400   Stock Out API                       HTTP 400
+  ❌ [GET ] 404   Machine Maintenance API             Endpoint not found (404)
+  ❌ [GET ] 404   Machine OEE Report API              Endpoint not found (404)
+  ❌ [GET ] 404   Gate Entry Outward API              Endpoint not found (404)
+  ❌ [GET ] 400   Sales Return API                    HTTP 400
+  ❌ [GET ] 404   Certificate of Conformance API      Endpoint not found (404)
+  ❌ [GET ] 400   Credit Debit Note (Sales) API       HTTP 400
+  ❌ [GET ] 400   Credit Debit Note (Purchase) API    HTTP 400
+  ❌ [GET ] 404   Salesman Incentive API              Endpoint not found (404)
+
+════════════════════════════════════════════════════════════════════════════════
+  BUG LIST - ISSUES FOUND
+════════════════════════════════════════════════════════════════════════════════
+
+  ── Backend API Issues ──
+
+  BUG-001: [API] Supplier Master API
+          Endpoint: GET /suppliers/all
+          Status: 400
+          Issue: HTTP 400
+
+  BUG-002: [API] Product Margin API
+          Endpoint: GET /product-margins/all
+          Status: 405
+          Issue: HTTP 405
+
+  BUG-003: [API] Dashboard API
+          Endpoint: GET /dashboard/summary
+          Status: 404
+          Issue: Endpoint not found (404)
+
+  BUG-004: [API] Item Enquiry API
+          Endpoint: GET /item-enquiries/all
+          Status: 400
+          Issue: HTTP 400
+
+  BUG-005: [API] Purchase Order (PO) API
+          Endpoint: GET /po/all
+          Status: 400
+          Issue: HTTP 400
+
+  BUG-006: [API] ABC Summary API
+          Endpoint: GET /abcstock-summary/all
+          Status: 404
+          Issue: Endpoint not found (404)
+
+  BUG-007: [API] Material Request API
+          Endpoint: GET /material-request/all
+          Status: 400
+          Issue: HTTP 400
+
+  BUG-008: [API] Gate Entry Inward API
+          Endpoint: GET /gate-inward/all
+          Status: 400
+          Issue: HTTP 400
+
+  BUG-009: [API] Vehicle Weighment API
+          Endpoint: GET /vehicle-weighment/all
+          Status: 400
+          Issue: HTTP 400
+
+  BUG-010: [API] GRN Summary API
+          Endpoint: GET /grn-summary/all
+          Status: 404
+          Issue: Endpoint not found (404)
+
+  BUG-011: [API] GRN Inter-Unit API
+          Endpoint: GET /grn-interunit/all
+          Status: 400
+          Issue: HTTP 400
+
+  BUG-012: [API] Stock Summary API
+          Endpoint: GET /stock-summary/all
+          Status: 400
+          Issue: HTTP 400
+
+  BUG-013: [API] Rack Bin Eligible API
+          Endpoint: GET /rack-bin-master/eligible?itemCategory=ALL&bundleNetWeight=1&store=Warehouse&unitName=ME&additionalAllocatedWeight=0
+          Status: 404
+          Issue: Endpoint not found (404)
+
+  BUG-014: [API] Stock In API
+          Endpoint: GET /stock-in/all
+          Status: 400
+          Issue: HTTP 400
+
+  BUG-015: [API] Stock Out API
+          Endpoint: GET /stock-out/all
+          Status: 400
+          Issue: HTTP 400
+
+  BUG-016: [API] Machine Maintenance API
+          Endpoint: GET /machine-maintenance/all
+          Status: 404
+          Issue: Endpoint not found (404)
+
+  BUG-017: [API] Machine OEE Report API
+          Endpoint: GET /machine-oee-report/all
+          Status: 404
+          Issue: Endpoint not found (404)
+
+  BUG-018: [API] Gate Entry Outward API
+          Endpoint: GET /gate-entry-packing-and-dispatch/all
+          Status: 404
+          Issue: Endpoint not found (404)
+
+  BUG-019: [API] Sales Return API
+          Endpoint: GET /stock-returns/all
+          Status: 400
+          Issue: HTTP 400
+
+  BUG-020: [API] Certificate of Conformance API
+          Endpoint: GET /certificate-of-confidence/all
+          Status: 404
+          Issue: Endpoint not found (404)
+
+  BUG-021: [API] Credit Debit Note (Sales) API
+          Endpoint: GET /credit-debit-note/all
+          Status: 400
+          Issue: HTTP 400
+
+  BUG-022: [API] Credit Debit Note (Purchase) API
+          Endpoint: GET /purchase-credit-debit-note/all
+          Status: 400
+          Issue: HTTP 400
+
+  BUG-023: [API] Salesman Incentive API
+          Endpoint: GET /incentives/all
+          Status: 404
+          Issue: Endpoint not found (404)
+
+════════════════════════════════════════════════════════════════════════════════
+  WORKING FEATURES
+════════════════════════════════════════════════════════════════════════════════
+
+  ✅ Authentication:
+      • Login Page
+
+  ✅ Dashboard:
+      • Admin Dashboard
+
+  ✅ Masters:
+      • Customer Master
+      • Supplier Master
+      • Item Master
+      • Sub-Contractor Master
+      • Unit Master
+      • Rack & Bin Master
+      • User Master
+      • Salesman Master
+      • Machine Master
+      • Nalco Price
+      • Hindalco Price
+      • Process Flow
+      • HSN Code
+      • Product Margin
+
+  ✅ Item Inquiry:
+      • Quotation Creation
+      • Quotation Summary
+      • New Customer Verification
+
+  ✅ Sales Order:
+      • SO Customer Approval
+      • SO Creation
+      • SO Summary
+      • SO Creation (Customer)
+      • SO Update (Customer)
+      • SO Approval Overdue
+      • SO Approval Pending
+
+  ✅ Purchase Order:
+      • PO Creation
+      • PO Summary
+      • PO Generation
+      • PO Summary Overall
+      • PO Mgmt Approval
+      • ABC Summary
+      • Purchase Follow-up
+      • Inter-Unit Material Request
+      • Inter-Unit Material Req Summary
+
+  ✅ Warehousing (Inward):
+      • Gate Entry - Inward Security
+      • Gate Entry - Inward Summary
+      • Vehicle Weighment
+      • Vehicle Weighment Form
+      • Vehicle Weighment Form (New)
+      • GRN - Purchase
+      • GRN - Purchase Summary
+      • GRN - Job Work
+      • GRN - Job Work Summary
+      • GRN - Inter-Unit Request
+      • GRN - Inter-Unit Req Summary
+      • Stock Transfer - All
+      • Stock Transfer - All Summary
+      • Stock Summary (Inventory-wise)
+      • SO Schedule Warehouse Pick List
+      • IUMT Schedule Warehouse Pick
+      • IUMT Stock Transfer Warehouse
+      • Sales Return
+      • Sales Return Summary
+      • Purchase Return
+      • Purchase Return Summary
+      • Store Material Transfer Summary
+
+  ✅ Production:
+      • Production Schedule
+      • Production Entry
+      • Production Summary
+      • Scrap Summary
+      • Production Idle Time Entry
+      • Machine Idle Time Summary
+      • Machine Maintenance Activity
+
+  ✅ Packing & Dispatch:
+      • Gate Entry - Outward Security
+      • Gate Entry - Outward Summary
+      • Packing Schedule
+      • Packing
+      • Packing Summary
+      • Packing List Transfer
+      • Packing List Summary
+      • Billing
+      • Billing Summary
+      • SO Summary All
+
+  ✅ Job Work:
+      • Packing List - Job Work
+      • Packing List - JW Summary
+      • DC Creation - Job Work
+      • DC Job Work Summary
+      • Job Work Summary
+
+  ✅ Inter Unit Material Transfer:
+      • Packing List - IUMT
+      • Packing List Summary - IUMT
+      • DC Creation - IUMT
+      • DC Summary - IUMT
+      • IUMT Summary
+
+  ✅ Certificate & Notes:
+      • Certificate of Conformance
+      • Credit/Debit Note - Sales
+      • Credit/Debit Note - Sales Summary
+      • Credit/Debit Note - Purchase
+      • Credit/Debit Note - Purchase Summary
+
+  ✅ Reports:
+      • Salesman Incentives
+      • Machine OEE Report
+
+  ✅ Backend APIs Working:
+      • Auth - Login (POST → 200)
+      • Customer Master API (GET → 200)
+      • Item Master API (GET → 200)
+      • Unit Master API (GET → 200)
+      • Rack Bin Master API (GET → 200)
+      • User Master API (GET → 200)
+      • Salesman Master API (GET → 200)
+      • Machine Master API (GET → 200)
+      • HSN Code API (GET → 200)
+      • Hindalco Price API (GET → 200)
+      • Nalco Price API (GET → 200)
+      • Process Flow API (GET → 200)
+      • Sub-Contractor API (GET → 200)
+      • Sales Order API (GET → 200)
+      • SO Summary API (GET → 200)
+      • PO Generation API (GET → 200)
+      • PO Approval API (GET → 200)
+      • Purchase Follow-Up API (GET → 200)
+      • GRN API (GET → 200)
+      • GRN Job Work API (GET → 200)
+      • Stock Transfer API (GET → 200)
+      • Production Schedule API (GET → 200)
+      • Production Entry API (GET → 200)
+      • Packing List API (GET → 200)
+      • Packing Scheduler API (GET → 200)
+      • Billing Summary API (GET → 200)
+      • Packing List IUMT API (GET → 200)
+      • Packing List Job Work API (GET → 200)
+      • DC Job Work API (GET → 200)
+      • DC IUMT API (GET → 200)
+      • Purchase Return API (GET → 200)
+
+════════════════════════════════════════════════════════════════════════════════
+  END OF REPORT
+════════════════════════════════════════════════════════════════════════════════
