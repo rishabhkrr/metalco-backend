@@ -34,4 +34,6 @@ public interface MaterialRequestService {
     List<Map<String, Object>> getQrDetails(String mrNumber, String lineNumber, String itemDescription);
 
     void deleteAllMaterialRequests();
+
+    Map<String, Object> generatePickListForIUMT(MaterialTransferScheduleDto dto);
 }

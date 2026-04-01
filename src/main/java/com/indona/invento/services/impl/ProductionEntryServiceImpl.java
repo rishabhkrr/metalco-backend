@@ -48,6 +48,9 @@ public class ProductionEntryServiceImpl implements ProductionEntryService {
     @Autowired
     private ScrapSummaryRepository scrapSummaryRepository;
 
+    @Autowired
+    private ItemMasterRepository itemMasterRepository;
+
     @Override
     public List<Map<String, Object>> getDetailsBySoAndLineNumber(String soNumber, String lineNumber) {
         return productionScheduleRepository.findDetailsBySoAndLineNumber(soNumber, lineNumber);
@@ -101,6 +104,11 @@ public class ProductionEntryServiceImpl implements ProductionEntryService {
         m.put("endPieceType", ep.getEndPieceType());
         m.put("qrGenerate", ep.getQrGenerate());
         m.put("qrCode", ep.getQrCode());
+        m.put("parentDimension", ep.getParentDimension());
+        m.put("batchNumber", ep.getBatchNumber());
+        m.put("width", ep.getWidth());
+        m.put("thickness", ep.getThickness());
+        m.put("length", ep.getLength());
         // If you want to return a simple reference string for productionEntry:
         m.put("productionEntry", ep.getProductionEntry() != null ? ep.getProductionEntry().getId() : null);
         return m;
@@ -499,6 +507,7 @@ public class ProductionEntryServiceImpl implements ProductionEntryService {
         e.setEndPieceType(dto.getEndPieceType());
         e.setQrGenerate(dto.getQrGenerate());
         e.setQrCode(dto.getQrCode());
+        e.setParentDimension(dto.getParentDimension());
         e.setBatchNumber(dto.getBatchNumber());
         e.setWidth(dto.getWidth());
         e.setThickness(dto.getThickness());
@@ -598,6 +607,7 @@ public class ProductionEntryServiceImpl implements ProductionEntryService {
         dto.setEndPieceType(e.getEndPieceType());
         dto.setQrGenerate(e.getQrGenerate());
         dto.setQrCode(e.getQrCode());
+        dto.setParentDimension(e.getParentDimension());
         dto.setBatchNumber(e.getBatchNumber());
         dto.setWidth(e.getWidth());
         dto.setThickness(e.getThickness());
@@ -705,36 +715,83 @@ public class ProductionEntryServiceImpl implements ProductionEntryService {
             rackColumnBin = "Common";
         }
 
-        // Create Stock Summary entry
-        StockSummaryEntity stockEntry = StockSummaryEntity.builder()
-            .unit(production.getUnit())
-            .store(store)
-            .storageArea(storageArea)
-            .rackColumnShelfNumber(rackColumnBin)
-            .itemDescription(production.getItemDescription())
-            .productCategory(production.getProductCategory())
-            .brand(production.getBrand())
-            .grade(production.getGrade())
-            .temper(production.getTemper())
-            .dimension(production.getDimension())
-            .quantityKg(endPiece.getEndPieceQuantityKg())
-            .quantityNo(endPiece.getEndPieceQuantityNo() != null ? endPiece.getEndPieceQuantityNo().intValue() : 0)
-            .itemGroup("Raw Materials")
-            .materialType(endPieceType)
-            .pickListLocked(false)
-            .reprintQr(endPiece.getQrGenerate() != null ? endPiece.getQrGenerate() : false)
-            .sectionNo(endPieceType)
-            .qrCode(endPiece.getQrCode())
-            // 🆕 Add end piece dimensions
-            .length(endPiece.getLength())
-            .width(endPiece.getWidth())
-            .thickness(endPiece.getThickness())
-            .batchNumber(endPiece.getBatchNumber())
-            .build();
+        // FIX #5: Resolve materialType from ItemMaster (not endPieceType)
+        String resolvedMaterialType = "";
+        if (production.getItemDescription() != null && !production.getItemDescription().isBlank()) {
+            Optional<ItemMasterEntity> itemMasterOpt = itemMasterRepository
+                    .findBySkuDescriptionIgnoreCase(production.getItemDescription());
+            if (itemMasterOpt.isPresent() && itemMasterOpt.get().getMaterialType() != null) {
+                resolvedMaterialType = itemMasterOpt.get().getMaterialType();
+            }
+        }
+
+        // FIX #3: UPSERT — Check if matching stock entry already exists
+        String dimension = production.getDimension();
+        Optional<StockSummaryEntity> existingOpt = stockSummaryRepository
+                .findByUnitAndItemDescriptionAndItemGroupAndStoreAndStorageAreaAndRackColumnShelfNumberAndDimension(
+                        production.getUnit(),
+                        production.getItemDescription(),
+                        "Raw Materials",
+                        store,
+                        storageArea,
+                        rackColumnBin,
+                        dimension);
+
+        StockSummaryEntity stockEntry;
+        if (existingOpt.isPresent()) {
+            // ♻️ UPDATE existing entry — add quantity
+            stockEntry = existingOpt.get();
+            BigDecimal oldKg = stockEntry.getQuantityKg() != null ? stockEntry.getQuantityKg() : BigDecimal.ZERO;
+            int oldNo = stockEntry.getQuantityNo() != null ? stockEntry.getQuantityNo() : 0;
+
+            BigDecimal addKg = endPiece.getEndPieceQuantityKg() != null ? endPiece.getEndPieceQuantityKg() : BigDecimal.ZERO;
+            int addNo = endPiece.getEndPieceQuantityNo() != null ? endPiece.getEndPieceQuantityNo().intValue() : 0;
+
+            stockEntry.setQuantityKg(oldKg.add(addKg));
+            stockEntry.setQuantityNo(oldNo + addNo);
+
+            // Update dimensions if provided
+            if (endPiece.getLength() != null) stockEntry.setLength(endPiece.getLength());
+            if (endPiece.getWidth() != null) stockEntry.setWidth(endPiece.getWidth());
+            if (endPiece.getThickness() != null) stockEntry.setThickness(endPiece.getThickness());
+            if (endPiece.getBatchNumber() != null) stockEntry.setBatchNumber(endPiece.getBatchNumber());
+
+            System.out.println("   ♻️ UPSERT UPDATE: End Piece → existing ID " + stockEntry.getId() +
+                " | Old Qty: " + oldKg + " → New Qty: " + stockEntry.getQuantityKg());
+        } else {
+            // ✨ CREATE new entry
+            stockEntry = StockSummaryEntity.builder()
+                .unit(production.getUnit())
+                .store(store)
+                .storageArea(storageArea)
+                .rackColumnShelfNumber(rackColumnBin)
+                .itemDescription(production.getItemDescription())
+                .productCategory(production.getProductCategory())
+                .brand(production.getBrand())
+                .grade(production.getGrade())
+                .temper(production.getTemper())
+                .dimension(dimension)
+                .quantityKg(endPiece.getEndPieceQuantityKg())
+                .quantityNo(endPiece.getEndPieceQuantityNo() != null ? endPiece.getEndPieceQuantityNo().intValue() : 0)
+                .itemGroup("Raw Materials")
+                .materialType(resolvedMaterialType)
+                .pickListLocked(false)
+                .reprintQr(endPiece.getQrGenerate() != null ? endPiece.getQrGenerate() : false)
+                .sectionNo(endPieceType)
+                .qrCode(endPiece.getQrCode())
+                .length(endPiece.getLength())
+                .width(endPiece.getWidth())
+                .thickness(endPiece.getThickness())
+                .batchNumber(endPiece.getBatchNumber())
+                .build();
+
+            System.out.println("   ✨ UPSERT CREATE: End Piece → new entry");
+        }
 
         stockSummaryRepository.save(stockEntry);
         System.out.println("   💾 End Piece saved to Stock Summary - Store: " + store +
             " | Area: " + storageArea + " | Rack: " + rackColumnBin +
+            " | MaterialType: " + resolvedMaterialType +
             " | Length: " + endPiece.getLength() + " | Width: " + endPiece.getWidth() +
             " | Thickness: " + endPiece.getThickness() + " | Batch: " + endPiece.getBatchNumber());
 

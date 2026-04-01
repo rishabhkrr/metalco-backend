@@ -31,6 +31,8 @@ public class MaterialRequestServiceImpl implements MaterialRequestService {
     private final StockTransferWarehouseRepository stockTransferWarehouseRepository;
     private final StockTransferWHReturnRepository stockTransferWHReturnRepository;
     private final SOSchedulePickListRepository soSchedulePickListRepository;
+    private final GrnLineItemRepository grnLineItemRepository;
+    private final com.indona.invento.services.GRNService grnService;
 
     private String generateMrNumber() {
         String prefix = "MEMR";
@@ -648,5 +650,185 @@ public class MaterialRequestServiceImpl implements MaterialRequestService {
             e.printStackTrace();
             throw new RuntimeException("Failed to delete all material requests: " + e.getMessage());
         }
+    }
+
+    @Override
+    public Map<String, Object> generatePickListForIUMT(MaterialTransferScheduleDto dto) {
+        System.out.println("\n╔══════════════════════════════════════════════════════════════════════════════╗");
+        System.out.println("║            📋 IUMT PICKLIST GENERATION (FULL ORDER ONLY)                    ║");
+        System.out.println("╚══════════════════════════════════════════════════════════════════════════════╝");
+
+        if (dto == null) {
+            return Map.of("success", false, "message", "No data provided");
+        }
+
+        System.out.println("   📦 MR Number: " + dto.getMrNumber());
+        System.out.println("   📦 Unit: " + dto.getUnitCode());
+        System.out.println("   📦 Item Description: " + dto.getItemDescription());
+        System.out.println("   📊 Required Qty: " + dto.getRetrievalQuantityKg() + " KG");
+
+        BigDecimal requiredQtyKg = dto.getRetrievalQuantityKg() != null ? dto.getRetrievalQuantityKg() : BigDecimal.ZERO;
+        if (requiredQtyKg.compareTo(BigDecimal.ZERO) <= 0) {
+            return Map.of("success", false, "message", "Required quantity must be > 0");
+        }
+
+        // Step 1: Filter stock by Unit + Item Group = RM + Item Description
+        List<StockSummaryEntity> allStock = stockSummaryRepository.findAll();
+        List<StockSummaryEntity> filteredStocks = allStock.stream()
+                .filter(s -> s.getUnit() != null && s.getUnit().trim().equalsIgnoreCase(dto.getUnitCode().trim()))
+                .filter(s -> s.getItemGroup() != null && s.getItemGroup().trim().equalsIgnoreCase("RAW MATERIAL"))
+                .filter(s -> s.getItemDescription() != null && s.getItemDescription().trim().equalsIgnoreCase(dto.getItemDescription().trim()))
+                .collect(Collectors.toList());
+
+        System.out.println("   🔍 Filtered stocks: " + filteredStocks.size());
+
+        // Step 2: Categorize into Loose / Warehouse / Common
+        List<Map<String, Object>> loosePieceBundles = new ArrayList<>();
+        List<Map<String, Object>> warehouseBundles = new ArrayList<>();
+        List<Map<String, Object>> commonBundles = new ArrayList<>();
+
+        for (StockSummaryEntity stock : filteredStocks) {
+            String storeRaw = stock.getStore() != null ? stock.getStore().trim() : "";
+            String storageAreaRaw = stock.getStorageArea() != null ? stock.getStorageArea().trim() : "";
+            String combinedStore = (storeRaw + " " + storageAreaRaw).toLowerCase();
+
+            String grnNumbersStr = stock.getGrnNumbers();
+            if (grnNumbersStr == null || grnNumbersStr.isBlank()) continue;
+
+            // Parse GRN numbers
+            List<String> grnList = new ArrayList<>();
+            try {
+                String grnJson = grnNumbersStr.trim();
+                if (grnJson.startsWith("[") && grnJson.endsWith("]")) {
+                    grnJson = grnJson.substring(1, grnJson.length() - 1);
+                    if (!grnJson.isBlank()) {
+                        for (String grn : grnJson.split(",")) {
+                            String cleanGrn = grn.trim().replace("\"", "");
+                            if (!cleanGrn.isBlank()) grnList.add(cleanGrn);
+                        }
+                    }
+                }
+            } catch (Exception e) { /* ignore */ }
+
+            for (String grnNumber : grnList) {
+                try {
+                    List<GrnLineItemEntity> lineItems = grnLineItemRepository.findByGrnNumber(grnNumber);
+                    Map<String, Object> grnResponse = grnService.getGrnBundleDetailsByGrnNumber(grnNumber);
+                    Long grnTimestamp = null;
+
+                    if (Boolean.TRUE.equals(grnResponse.get("success"))) {
+                        @SuppressWarnings("unchecked")
+                        Map<String, Object> grnMetadata = (Map<String, Object>) grnResponse.get("data");
+                        grnTimestamp = grnMetadata.get("timestamp") != null ? ((Number) grnMetadata.get("timestamp")).longValue() : null;
+                    }
+
+                    for (GrnLineItemEntity lineItem : lineItems) {
+                        if (lineItem.getItemDescription() != null &&
+                            lineItem.getItemDescription().trim().equalsIgnoreCase(dto.getItemDescription().trim())) {
+
+                            Map<String, Object> bundleMap = new LinkedHashMap<>();
+                            bundleMap.put("bundleId", lineItem.getId());
+                            bundleMap.put("grnRefNo", grnNumber);
+                            bundleMap.put("grnTimestamp", grnTimestamp);
+                            bundleMap.put("slNo", lineItem.getSlNo());
+                            bundleMap.put("itemDescription", lineItem.getItemDescription());
+                            bundleMap.put("productCategory", lineItem.getProductCategory());
+                            bundleMap.put("brand", lineItem.getBrand());
+                            bundleMap.put("grade", lineItem.getGrade());
+                            bundleMap.put("temper", lineItem.getTemper());
+                            bundleMap.put("quantityKg", lineItem.getWeightmentQuantityKg() != null ? lineItem.getWeightmentQuantityKg() : BigDecimal.ZERO);
+                            bundleMap.put("quantityNo", lineItem.getWeightmentQuantityNo() != null ? lineItem.getWeightmentQuantityNo() : 0);
+                            bundleMap.put("store", lineItem.getCurrentStore() != null ? lineItem.getCurrentStore() : storeRaw);
+                            bundleMap.put("storageArea", lineItem.getStorageArea() != null ? lineItem.getStorageArea() : storageAreaRaw);
+                            bundleMap.put("rack", lineItem.getRackColumnBinNumber());
+                            bundleMap.put("qrCode", lineItem.getQrCode());
+                            bundleMap.put("qrCodeImageUrl", lineItem.getQrCodeImageUrl());
+
+                            // Categorize by store
+                            if (combinedStore.contains("loose") && combinedStore.contains("piece")) {
+                                loosePieceBundles.add(bundleMap);
+                            } else if (combinedStore.contains("common")) {
+                                commonBundles.add(bundleMap);
+                            } else {
+                                warehouseBundles.add(bundleMap);
+                            }
+                        }
+                    }
+                } catch (Exception e) {
+                    System.out.println("⚠️ Error fetching GRN " + grnNumber + ": " + e.getMessage());
+                }
+            }
+        }
+
+        // Sort all by FIFO (oldest GRN first)
+        Comparator<Map<String, Object>> fifoSort = Comparator.comparingLong(b -> {
+            Object ts = b.get("grnTimestamp");
+            return ts instanceof Number ? ((Number) ts).longValue() : Long.MAX_VALUE;
+        });
+        loosePieceBundles.sort(fifoSort);
+        warehouseBundles.sort(fifoSort);
+        commonBundles.sort(fifoSort);
+
+        System.out.println("   📦 Loose Pieces: " + loosePieceBundles.size());
+        System.out.println("   📦 Warehouse: " + warehouseBundles.size());
+        System.out.println("   📦 Common: " + commonBundles.size());
+
+        // Step 3: Run FIFO Engine (FULL order type only for IUMT)
+        com.indona.invento.services.helpers.FifoResult fifoResult =
+                com.indona.invento.services.helpers.FifoPicklistEngine.allocate(
+                        requiredQtyKg, loosePieceBundles, warehouseBundles, commonBundles);
+
+        // Build response
+        Map<String, Object> responseData = new LinkedHashMap<>();
+        responseData.put("unit", dto.getUnitCode());
+        responseData.put("itemDescription", dto.getItemDescription());
+        responseData.put("mrNumber", dto.getMrNumber());
+        responseData.put("lineNumber", dto.getLineNumber());
+        responseData.put("productCategory", dto.getProductCategory());
+        responseData.put("brand", dto.getBrand());
+        responseData.put("grade", dto.getGrade());
+        responseData.put("temper", dto.getTemper());
+        responseData.put("requiredQuantityKg", dto.getRetrievalQuantityKg());
+        responseData.put("requiredQuantityNo", dto.getRetrievalQuantityNo());
+        responseData.put("storageType", fifoResult.getStorageType());
+        responseData.put("selectionReason", fifoResult.getSelectionReason());
+        responseData.put("totalSelectedQuantityKg", fifoResult.getTotalSelectedQtyKg());
+        responseData.put("totalSelectedQuantityNo", fifoResult.getTotalSelectedQtyNo());
+        responseData.put("matchedStep", fifoResult.getMatchedStep());
+        responseData.put("hasShortfall", fifoResult.isHasShortfall());
+        if (fifoResult.isHasShortfall()) {
+            responseData.put("shortfallKg", fifoResult.getShortfallKg());
+        }
+
+        // Build bundle breakdown
+        List<Map<String, Object>> bundleBreakdown = new ArrayList<>();
+        List<Map<String, Object>> selected = fifoResult.getSelectedBundles();
+        for (int i = 0; i < selected.size(); i++) {
+            Map<String, Object> b = selected.get(i);
+            Map<String, Object> info = new LinkedHashMap<>();
+            info.put("slNo", i + 1);
+            info.put("bundleId", b.get("bundleId"));
+            info.put("quantityKg", b.get("quantityKg"));
+            info.put("quantityNo", b.get("quantityNo"));
+            info.put("grnRefNo", b.get("grnRefNo"));
+            info.put("grnTimestamp", b.get("grnTimestamp"));
+            info.put("store", b.get("store"));
+            info.put("storageArea", b.get("storageArea"));
+            info.put("rack", b.get("rack"));
+            info.put("itemDescription", b.get("itemDescription"));
+            info.put("brand", b.get("brand"));
+            info.put("grade", b.get("grade"));
+            info.put("temper", b.get("temper"));
+            info.put("qrCode", b.get("qrCode"));
+            bundleBreakdown.add(info);
+        }
+        responseData.put("selectedBundles", bundleBreakdown);
+        responseData.put("totalBundlesSelected", bundleBreakdown.size());
+
+        return Map.of(
+                "success", true,
+                "message", "IUMT Picklist generated successfully (FIFO 9-step engine)",
+                "data", responseData
+        );
     }
 }

@@ -73,6 +73,17 @@ public class GateEntryPackingAndDispatchServiceImpl implements GateEntryPackingA
 	}
 
 	@Override
+	public List<String> getVehicleNumbersFiltered(String purpose, String mode) {
+		// Fetch vehicles where Status=IN, Purpose matches, Mode matches
+		return repository.findByVehicleOutStatusPackingAndDispatchIgnoreCase("IN").stream()
+				.filter(entry -> purpose.equalsIgnoreCase(entry.getPurposePackingAndDispatch()))
+				.filter(entry -> mode.equalsIgnoreCase(entry.getModePackingAndDispatch()))
+				.map(GateEntryPackingAndDispatch::getVehicleNumberPackingAndDispatch)
+				.distinct()
+				.collect(Collectors.toList());
+	}
+
+	@Override
 	@Transactional
 	public GateEntryPackingAndDispatch updateGateEntryByRefNo(String refNo, GateEntryUpdateDTO dto) {
 		GateEntryPackingAndDispatch existing = repository.findByGateEntryRefNoPackingAndDispatch(refNo)

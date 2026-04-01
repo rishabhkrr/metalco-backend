@@ -38,4 +38,7 @@ public interface GRNInterUnitService {
 
     // MEDCI filtering
     boolean isMedciUsed(String medcNumber, String unit);
+
+    // FRD: IUMR-002 — Available MEDCI numbers (filtered)
+    List<String> getAvailableMedciNumbers(String unit);
 }

@@ -127,5 +127,19 @@ public class MaterialRequestController {
             ));
         }
     }
+
+    @PostMapping("/picklist/generate")
+    public ResponseEntity<Map<String, Object>> generatePickListForIUMT(@RequestBody MaterialTransferScheduleDto dto) {
+        try {
+            Map<String, Object> result = service.generatePickListForIUMT(dto);
+            boolean success = Boolean.TRUE.equals(result.get("success"));
+            return ResponseEntity.status(success ? HttpStatus.OK : HttpStatus.BAD_REQUEST).body(result);
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Map.of(
+                    "success", false,
+                    "message", "Error generating IUMT picklist: " + e.getMessage()
+            ));
+        }
+    }
 }
 

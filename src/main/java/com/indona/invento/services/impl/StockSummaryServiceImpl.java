@@ -54,10 +54,66 @@ public class StockSummaryServiceImpl implements StockSummaryService {
     @Autowired
     private ItemEnquiryRepository itemEnquiryRepository;
 
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+    // FIX #1: Item Group Short Code Normalization
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+    private String normalizeItemGroup(String itemGroup) {
+        if (itemGroup == null || itemGroup.isBlank()) return "";
+        String upper = itemGroup.trim().toUpperCase();
+        if (upper.equals("RAW MATERIAL") || upper.equals("RAW MATERIALS") || upper.equals("RM")) return "RM";
+        if (upper.equals("SEMI FINISHED GOODS") || upper.equals("SEMI-FINISHED GOODS") || upper.equals("SFG")) return "SFG";
+        if (upper.equals("FINISHED GOODS") || upper.equals("FG")) return "FG";
+        return itemGroup; // Return original if no known mapping
+    }
+
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+    // FIX #2: Material Type Code Mapping
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+    private String getMaterialTypeCode(String materialTypeName) {
+        if (materialTypeName == null || materialTypeName.isBlank()) return null;
+        String upper = materialTypeName.trim().toUpperCase();
+        return switch (upper) {
+            case "ALUMINIUM", "ALUMINUM" -> "AL";
+            case "COPPER" -> "CU";
+            case "STAINLESS STEEL" -> "SS";
+            case "BRASS" -> "BR";
+            case "MILD STEEL", "MS" -> "MS";
+            case "GALVANIZED IRON", "GI" -> "GI";
+            case "ZINC" -> "ZN";
+            case "LEAD" -> "PB";
+            case "TIN" -> "SN";
+            case "NICKEL" -> "NI";
+            default -> null;
+        };
+    }
+
+    private String formatMaterialType(String materialTypeName) {
+        if (materialTypeName == null || materialTypeName.isBlank()) return "";
+        String code = getMaterialTypeCode(materialTypeName);
+        if (code != null) {
+            return materialTypeName.trim() + " - " + code;
+        }
+        return materialTypeName.trim();
+    }
+
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+    // FIX #5: Centralized Material Type Resolution
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+    public String resolveMaterialType(String materialType, String itemDescription) {
+        if (materialType != null && !materialType.isBlank()) return materialType;
+        if (itemDescription != null && !itemDescription.isBlank()) {
+            Optional<ItemMasterEntity> itemOpt = itemMasterRepository.findBySkuDescriptionIgnoreCase(itemDescription);
+            if (itemOpt.isPresent() && itemOpt.get().getMaterialType() != null) {
+                return itemOpt.get().getMaterialType();
+            }
+        }
+        return "";
+    }
+
     @Override
     public StockSummaryEntity create(StockSummaryDto dto) {
         try {
-            log.info("📦 [StockSummary] Creating StockSummaryEntity...");
+            log.info("ðŸ“¦ [StockSummary] Creating StockSummaryEntity...");
             log.info("   - Unit: {}", dto.getUnit());
             log.info("   - Store: {}", dto.getStore());
             log.info("   - Storage Area: {}", dto.getStorageArea());
@@ -86,13 +142,13 @@ public class StockSummaryServiceImpl implements StockSummaryService {
                     .sectionNo(dto.getSectionNo())
                     .build();
 
-            log.info("   ✅ Entity built. Before saving - Section No: {}", entity.getSectionNo());
+            log.info("   âœ… Entity built. Before saving - Section No: {}", entity.getSectionNo());
             StockSummaryEntity saved = repository.save(entity);
-            log.info("   💾 StockSummary saved to DB - ID: {}, Section No: {}", saved.getId(), saved.getSectionNo());
+            log.info("   ðŸ’¾ StockSummary saved to DB - ID: {}, Section No: {}", saved.getId(), saved.getSectionNo());
 
             return saved;
         } catch (Exception e) {
-            log.error("   ❌ Error creating stock entry: {}", e.getMessage(), e);
+            log.error("   âŒ Error creating stock entry: {}", e.getMessage(), e);
             throw new RuntimeException("Failed to create stock entry: " + e.getMessage());
         }
     }
@@ -147,24 +203,24 @@ public class StockSummaryServiceImpl implements StockSummaryService {
 
     @Override
     public void deleteAll() {
-        System.out.println("\n╔════════════════════════════════════════╗");
-        System.out.println("║     🗑️  DELETE ALL STOCK SUMMARY       ║");
-        System.out.println("╚════════════════════════════════════════╝\n");
+        System.out.println("\nâ•”â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•—");
+        System.out.println("â•‘     ðŸ—‘ï¸  DELETE ALL STOCK SUMMARY       â•‘");
+        System.out.println("â•šâ•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•\n");
 
         try {
             long totalCount = repository.count();
-            System.out.println("📊 Total stock entries before deletion: " + totalCount);
+            System.out.println("ðŸ“Š Total stock entries before deletion: " + totalCount);
 
             repository.deleteAll();
 
             long afterCount = repository.count();
-            System.out.println("✅ All stock summary entries deleted successfully!");
-            System.out.println("📊 Total stock entries after deletion: " + afterCount);
-            System.out.println("\n╔════════════════════════════════════════╗");
-            System.out.println("║     ✅ DELETION COMPLETE               ║");
-            System.out.println("╚════════════════════════════════════════╝\n");
+            System.out.println("âœ… All stock summary entries deleted successfully!");
+            System.out.println("ðŸ“Š Total stock entries after deletion: " + afterCount);
+            System.out.println("\nâ•”â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•—");
+            System.out.println("â•‘     âœ… DELETION COMPLETE               â•‘");
+            System.out.println("â•šâ•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•\n");
         } catch (Exception e) {
-            System.err.println("❌ Error deleting all stock entries: " + e.getMessage());
+            System.err.println("âŒ Error deleting all stock entries: " + e.getMessage());
             e.printStackTrace();
             throw new RuntimeException("Failed to delete all stock entries: " + e.getMessage());
         }
@@ -175,7 +231,7 @@ public class StockSummaryServiceImpl implements StockSummaryService {
         String yy = String.format("%02d", now.getYear() % 100);
         String mm = String.format("%02d", now.getMonthValue());
 
-        // Example: MEINYYMM#### → MEIN25120001
+        // Example: MEINYYMM#### â†’ MEIN25120001
         String prefix = "MEIN" + yy + mm;
 
         // Fetch last sequence from DB for this month
@@ -197,28 +253,28 @@ public class StockSummaryServiceImpl implements StockSummaryService {
             List<String> productCategories,
             List<String> materialTypes) {
         log.info("=== Starting getFilteredSummary ===");
-        log.info("Input params → unit={}, brands={}, productCategories={}, materialTypes={}",
+        log.info("Input params â†’ unit={}, brands={}, productCategories={}, materialTypes={}",
                 unit, brands, productCategories, materialTypes);
 
         // Normalize filters
         unit = (unit != null && !unit.isBlank()) ? unit.trim() : null;
         if (brands != null && brands.contains("ALL")) {
-            log.info("ALL brand detected → ignoring brand filter");
+            log.info("ALL brand detected â†’ ignoring brand filter");
             brands = null;
         }
         productCategories = (productCategories != null && !productCategories.isEmpty()) ? productCategories : null;
         materialTypes = (materialTypes != null && !materialTypes.isEmpty()) ? materialTypes : null;
 
-        // 1️⃣ Fetch stock summary
+        // 1ï¸âƒ£ Fetch stock summary
         List<StockSummaryEntity> stockList = repository.filterStockSummary(unit, brands, productCategories,
                 materialTypes);
         log.info("Fetched {} stock records from repository", stockList.size());
         if (stockList.isEmpty()) {
-            log.warn("No stock records found → returning empty list");
+            log.warn("No stock records found â†’ returning empty list");
             return Collections.emptyList();
         }
 
-        // 2️⃣ Aggregate quantities
+        // 2ï¸âƒ£ Aggregate quantities
         Map<String, StockSummaryEntity> aggregated = new HashMap<>();
         for (StockSummaryEntity stock : stockList) {
             String key = stock.getUnit() + "|" + stock.getProductCategory() + "|" +
@@ -237,7 +293,7 @@ public class StockSummaryServiceImpl implements StockSummaryService {
                     consolidated.setQuantityKg(stock.getQuantityKg());
                     return consolidated;
                 } else {
-                    log.debug("Updating aggregated entry for key={} → adding {}", key, stock.getQuantityKg());
+                    log.debug("Updating aggregated entry for key={} â†’ adding {}", key, stock.getQuantityKg());
                     v.setQuantityKg(v.getQuantityKg().add(stock.getQuantityKg()));
                     return v;
                 }
@@ -246,7 +302,7 @@ public class StockSummaryServiceImpl implements StockSummaryService {
         List<StockSummaryEntity> consolidatedList = new ArrayList<>(aggregated.values());
         log.info("Aggregated into {} consolidated records", consolidatedList.size());
 
-        // 3️⃣ Pre‑fetch sales in one go
+        // 3ï¸âƒ£ Preâ€‘fetch sales in one go
         List<String> itemDescs = consolidatedList.stream().map(StockSummaryEntity::getItemDescription).toList();
         LocalDate startDate = LocalDate.now().withDayOfMonth(1).minusMonths(12);
         List<Object[]> raw = soSummaryRepository.getMonthlySaleForItems(unit, itemDescs, startDate);
@@ -258,7 +314,7 @@ public class StockSummaryServiceImpl implements StockSummaryService {
                     .put((String) row[1], (BigDecimal) row[2]);
         }
 
-        // 4️⃣ Pre‑fetch all alerts in one go
+        // 4ï¸âƒ£ Preâ€‘fetch all alerts in one go
         Set<String> existingAlerts = lowStockAlertRepository
                 .findAllByUnitAndItemDescriptions(unit, itemDescs)
                 .stream()
@@ -266,7 +322,7 @@ public class StockSummaryServiceImpl implements StockSummaryService {
                 .collect(Collectors.toSet());
         log.info("Fetched {} existing alerts from LowStockAlert table", existingAlerts.size());
 
-        // 5️⃣ Build DTOs
+        // 5ï¸âƒ£ Build DTOs
         List<StockSummaryWithItemDetailsDTO> result = new ArrayList<>();
         for (StockSummaryEntity stock : consolidatedList) {
             String itemDesc = stock.getItemDescription();
@@ -304,12 +360,12 @@ public class StockSummaryServiceImpl implements StockSummaryService {
             boolean existsInAlert = existingAlerts.contains(alertKey);
 
             dto.setStatus(existsInAlert ? "PO Generated Already" : "");
-            log.debug("Item={} → existsInAlert={}, status={}", itemDesc, existsInAlert, dto.getStatus());
+            log.debug("Item={} â†’ existsInAlert={}, status={}", itemDesc, existsInAlert, dto.getStatus());
 
             // Condition check
             if (!existsInAlert && dto.getReorderLevel() != null &&
                     dto.getQuantityKg().compareTo(dto.getReorderLevel()) < 0) {
-                log.info("Low stock condition met for item={} → currentStock={} < reorderLevel={}",
+                log.info("Low stock condition met for item={} â†’ currentStock={} < reorderLevel={}",
                         dto.getItemDescription(), dto.getQuantityKg(), dto.getReorderLevel());
 
                 String newPrNumber = generatePRNumber();
@@ -370,7 +426,7 @@ public class StockSummaryServiceImpl implements StockSummaryService {
             result.add(dto);
         }
 
-        log.info("=== Completed getFilteredSummary → returning {} DTOs ===", result.size());
+        log.info("=== Completed getFilteredSummary â†’ returning {} DTOs ===", result.size());
         return result;
     }
 
@@ -396,13 +452,13 @@ public class StockSummaryServiceImpl implements StockSummaryService {
                 .divide(BigDecimal.valueOf(27), 4, RoundingMode.DOWN);
         dto.setDailyConsumption(dailyConsumption);
 
-        // 4. Safety stock = daily × 15
+        // 4. Safety stock = daily Ã— 15
         BigDecimal safetyStock = dailyConsumption
                 .multiply(BigDecimal.valueOf(15))
                 .setScale(4, RoundingMode.DOWN);
         dto.setSafetyStock(safetyStock);
 
-        // 5. Reorder quantity = daily × MOQ
+        // 5. Reorder quantity = daily Ã— MOQ
         BigDecimal moq = dto.getMoq() != null ? dto.getMoq() : BigDecimal.ZERO;
         BigDecimal reorderQty = dailyConsumption
                 .multiply(moq)
@@ -433,7 +489,7 @@ public class StockSummaryServiceImpl implements StockSummaryService {
                     monthMap.getOrDefault(key, BigDecimal.ZERO)));
         }
 
-        return list; // already newest → oldest
+        return list; // already newest â†’ oldest
     }
 
     @Override
@@ -448,8 +504,8 @@ public class StockSummaryServiceImpl implements StockSummaryService {
                 entity.getBrand(),
                 entity.getGrade(),
                 entity.getTemper(),
-                "Kg", // ✅ UOM
-                entity.getSectionNo() // ✅ New field added
+                "Kg", // âœ… UOM
+                entity.getSectionNo() // âœ… New field added
         );
     }
 
@@ -484,7 +540,7 @@ public class StockSummaryServiceImpl implements StockSummaryService {
                             .findFirst()
                             .orElse(null);
 
-                    log.info("🔍 Selected sample for item group: id={}, itemGroup={}, hasGrnNumbers={}",
+                    log.info("ðŸ” Selected sample for item group: id={}, itemGroup={}, hasGrnNumbers={}",
                             sample.getId(), itemGroupValue,
                             sample.getGrnNumbers() != null && !sample.getGrnNumbers().isEmpty());
 
@@ -533,7 +589,7 @@ public class StockSummaryServiceImpl implements StockSummaryService {
                                         .quantityNo(e.getQuantityNo())
                                         .itemPrice(e.getItemPrice())
                                         .storageArea(e.getStorageArea())
-                                        .grnNumbers(grnNumbersObj) // ✅ Add GRN numbers
+                                        .grnNumbers(grnNumbersObj) // âœ… Add GRN numbers
                                         .build();
                             })
                             .toList();
@@ -550,13 +606,13 @@ public class StockSummaryServiceImpl implements StockSummaryService {
                             if (grnStr.startsWith("[") && grnStr.endsWith("]")) {
                                 // It's a JSON array - parse it
                                 grnNumbersObj = mapper.readValue(grnStr, Object.class);
-                                log.info("📋 GRN Numbers from DB (JSON array): {}", grnNumbersObj);
+                                log.info("ðŸ“‹ GRN Numbers from DB (JSON array): {}", grnNumbersObj);
                             } else {
                                 // It's a plain string - wrap it in a list
                                 java.util.List<String> grnList = new java.util.ArrayList<>();
                                 grnList.add(grnStr);
                                 grnNumbersObj = grnList;
-                                log.info("📋 GRN Numbers from DB (plain string): {}", grnNumbersObj);
+                                log.info("ðŸ“‹ GRN Numbers from DB (plain string): {}", grnNumbersObj);
                             }
                         } catch (Exception e) {
                             log.error("Error processing GRN numbers: {} - Value: {}", e.getMessage(),
@@ -564,7 +620,7 @@ public class StockSummaryServiceImpl implements StockSummaryService {
                             grnNumbersObj = new java.util.ArrayList<>();
                         }
                     } else {
-                        log.warn("⚠️ GRN Numbers is empty or null for item: {}", sample.getItemDescription());
+                        log.warn("âš ï¸ GRN Numbers is empty or null for item: {}", sample.getItemDescription());
                     }
 
                     return StockSummaryFormattedDTO.builder()
@@ -575,8 +631,8 @@ public class StockSummaryServiceImpl implements StockSummaryService {
                             .productCategory(sample.getProductCategory())
                             .brand(sample.getBrand())
                             .grade(sample.getGrade())
-                            .materialType(sample.getMaterialType())
-                            .itemGroup(itemGroupValue)
+                            .materialType(formatMaterialType(resolveMaterialType(sample.getMaterialType(), sample.getItemDescription())))
+                            .itemGroup(normalizeItemGroup(itemGroupValue))
                             .temper(sample.getTemper())
                             .dimension(sample.getDimension())
                             .reprintQr(sample.getReprintQr())
@@ -732,7 +788,7 @@ public class StockSummaryServiceImpl implements StockSummaryService {
                 .setScale(4, RoundingMode.DOWN);
 
         log.info(
-                "Calculated metrics → totalConsumption={}, monthlyAvg={}, dailyConsumption={}, safetyStock={}, reorderLevel={}",
+                "Calculated metrics â†’ totalConsumption={}, monthlyAvg={}, dailyConsumption={}, safetyStock={}, reorderLevel={}",
                 totalConsumption, monthlyAverage, dailyConsumption, safetyStock, reorderLevel);
 
         // 8. Build and return DTO
@@ -768,12 +824,12 @@ public class StockSummaryServiceImpl implements StockSummaryService {
                     monthMap.getOrDefault(key, BigDecimal.ZERO)));
         }
 
-        return list; // newest → oldest
+        return list; // newest â†’ oldest
     }
 
     @Override
     public List<Map<String, Object>> searchByUnitAndItemDescription(String unit, String itemDescription) {
-        log.info("🔍 Searching Stock Summary by Unit and ItemDescription...");
+        log.info("ðŸ” Searching Stock Summary by Unit and ItemDescription...");
         log.info("   - Unit: '{}'", unit);
         log.info("   - ItemDescription: '{}'", itemDescription);
 
@@ -813,7 +869,7 @@ public class StockSummaryServiceImpl implements StockSummaryService {
                                 }
                             }
                         } catch (Exception e) {
-                            log.warn("⚠️ Error parsing GRN numbers: {}", e.getMessage());
+                            log.warn("âš ï¸ Error parsing GRN numbers: {}", e.getMessage());
                             // Add as is if parsing fails
                             grnList.add(entry.getGrnNumbers());
                         }
@@ -828,9 +884,9 @@ public class StockSummaryServiceImpl implements StockSummaryService {
                 })
                 .collect(Collectors.toList());
 
-        log.info("   ✅ Found {} location(s)", result.size());
+        log.info("   âœ… Found {} location(s)", result.size());
         for (Map<String, Object> item : result) {
-            log.info("      📍 Store: {}, Area: {}, Rack: {}, GRNs: {}",
+            log.info("      ðŸ“ Store: {}, Area: {}, Rack: {}, GRNs: {}",
                     item.get("store"), item.get("storageArea"),
                     item.get("rackColumnShelfNumber"), item.get("grnNumbers"));
         }
@@ -841,29 +897,28 @@ public class StockSummaryServiceImpl implements StockSummaryService {
     @Override
     @Transactional
     public java.util.Map<String, Object> saveReturnStock(ReturnStockDTO dto) {
-        System.out.println("\n╔══════════════════════════════════════════════════════════════════════════════╗");
-        System.out.println("║            📦 RETURN STOCK SAVE - NEW IMPLEMENTATION                        ║");
-        System.out.println("╚══════════════════════════════════════════════════════════════════════════════╝");
-        System.out.println("┌──────────────────────────────────────────────────────────────────────────────┐");
-        System.out.println("│ INPUT PARAMETERS                                                            │");
-        System.out.println("├──────────────────────────────────────────────────────────────────────────────┤");
-        System.out.println("│ Unit           : " + dto.getUnit());
-        System.out.println("│ Item Desc      : " + dto.getItemDescription());
+        System.out.println("\nâ•”â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•—");
+        System.out.println("â•‘            ðŸ“¦ RETURN STOCK SAVE - NEW IMPLEMENTATION                        â•‘");
+        System.out.println("â•šâ•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•");
+        System.out.println("â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”");
+        System.out.println("â”‚ INPUT PARAMETERS                                                            â”‚");
+        System.out.println("â”œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¤");
+        System.out.println("â”‚ Unit           : " + dto.getUnit());
+        System.out.println("â”‚ Item Desc      : " + dto.getItemDescription());
         System.out
-                .println("│ Return Entries : " + (dto.getReturnEntries() != null ? dto.getReturnEntries().size() : 0));
-        System.out.println("│ Target Store   : Loose Piece (fixed)");
-        System.out.println("│ Item Group     : RAW MATERIAL (fixed)");
-        System.out.println("└──────────────────────────────────────────────────────────────────────────────┘");
+                .println("â”‚ Return Entries : " + (dto.getReturnEntries() != null ? dto.getReturnEntries().size() : 0));
+        System.out.println("â”‚ Item Group     : RAW MATERIAL (fixed)");
+        System.out.println("â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜");
 
         List<StockSummaryEntity> savedEntities = new java.util.ArrayList<>();
         List<StockSummaryBundleEntity> savedBundles = new java.util.ArrayList<>();
         List<String> errors = new java.util.ArrayList<>();
 
-        String targetStore = "Loose Piece";
+        String defaultStore = "Loose Piece Storage";
         String targetItemGroup = "RAW MATERIAL";
 
         if (dto.getReturnEntries() == null || dto.getReturnEntries().isEmpty()) {
-            System.out.println("\n⚠️ No return entries provided - ABORTING");
+            System.out.println("\nâš ï¸ No return entries provided - ABORTING");
             return java.util.Map.of(
                     "success", false,
                     "message", "No return entries provided",
@@ -873,17 +928,18 @@ public class StockSummaryServiceImpl implements StockSummaryService {
         for (int i = 0; i < dto.getReturnEntries().size(); i++) {
             ReturnStockDTO.ReturnEntryDTO entry = dto.getReturnEntries().get(i);
 
-            System.out.println("\n┌─ ENTRY [" + (i + 1) + "/" + dto.getReturnEntries().size()
-                    + "] ────────────────────────────────────────────────────────┐");
-            System.out.println("│ 📋 ENTRY DETAILS:");
-            System.out.println("│    Batch Number (GRN): " + entry.getBatchNumber());
-            System.out.println("│    Date of Inward    : " + entry.getDateOfInward());
-            System.out.println("│    Return Qty        : " + entry.getReturnQuantityKg() + " KG | "
+            System.out.println("\nâ”Œâ”€ ENTRY [" + (i + 1) + "/" + dto.getReturnEntries().size()
+                    + "] â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”");
+            System.out.println("â”‚ ðŸ“‹ ENTRY DETAILS:");
+            System.out.println("â”‚    Batch Number (GRN): " + entry.getBatchNumber());
+            System.out.println("â”‚    Date of Inward    : " + entry.getDateOfInward());
+            System.out.println("â”‚    Return Qty        : " + entry.getReturnQuantityKg() + " KG | "
                     + entry.getReturnQuantityNo() + " NO");
-            System.out.println("│    Storage Area      : " + entry.getStorageArea());
-            System.out.println("│    Rack/Bin          : " + entry.getRackColumnBin());
-            System.out.println("│    Dimension         : " + entry.getDimension());
-            System.out.println("├──────────────────────────────────────────────────────────────────────────────┤");
+            System.out.println("â”‚    Return Store      : " + entry.getReturnStore());
+            System.out.println("â”‚    Storage Area      : " + entry.getStorageArea());
+            System.out.println("â”‚    Rack/Bin          : " + entry.getRackColumnBin());
+            System.out.println("â”‚    Dimension         : " + entry.getDimension());
+            System.out.println("â”œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¤");
 
             try {
                 String storageArea = entry.getStorageArea() != null ? entry.getStorageArea() : "Common";
@@ -891,26 +947,53 @@ public class StockSummaryServiceImpl implements StockSummaryService {
                 String dimension = entry.getDimension();
                 String grnNumber = entry.getBatchNumber();
 
-                // ═══════════════════════════════════════════════════════════════════
-                // STEP 1: CHECK IF STOCK SUMMARY ENTRY EXISTS (unit + itemDesc + itemGroup +
-                // store + storageArea + rack + dimension)
-                // ═══════════════════════════════════════════════════════════════════
-                System.out.println("│ 🔍 STEP 1: Checking for existing Stock Summary entry...");
-                System.out.println("│    Search Criteria:");
-                System.out.println("│       - Unit        : '" + dto.getUnit() + "'");
-                System.out.println("│       - ItemDesc    : '" + dto.getItemDescription() + "'");
-                System.out.println("│       - ItemGroup   : '" + targetItemGroup + "'");
-                System.out.println("│       - Store       : '" + targetStore + "'");
-                System.out.println("│       - StorageArea : '" + storageArea + "'");
-                System.out.println("│       - Rack        : '" + rackColumnBin + "'");
-                System.out.println("│       - Dimension   : '" + dimension + "'");
+                // Use the actual return store from the entry (set by allocateReturnRack)
+                String entryStore = entry.getReturnStore() != null && !entry.getReturnStore().isEmpty()
+                        ? entry.getReturnStore() : defaultStore;
+                System.out.println("â”‚    Resolved Store    : " + entryStore);
+
+                // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+                // PRE-ENRICHMENT: Lookup GRN Item for product details
+                // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+                String preProductCategory = null;
+                String preBrand = null;
+                String preGrade = null;
+                String preTemper = null;
+                String preMaterialType = "ALUMINIUM - AL";
+
+                if (grnNumber != null && !grnNumber.isEmpty()) {
+                    Optional<GRNEntity> preGrnOpt = grnRepository.findByGrnRefNumber(grnNumber);
+                    if (preGrnOpt.isPresent()) {
+                        GRNEntity preGrn = preGrnOpt.get();
+                        List<GRNItemEntity> preGrnItems = preGrn.getGrnItems();
+                        if (preGrnItems != null && !preGrnItems.isEmpty()) {
+                            GRNItemEntity preItem = preGrnItems.stream()
+                                    .filter(item -> dto.getItemDescription() != null &&
+                                            dto.getItemDescription().equalsIgnoreCase(item.getItemDescription()))
+                                    .findFirst()
+                                    .orElse(preGrnItems.get(0));
+                            preProductCategory = preItem.getProductCategory();
+                            preBrand = preItem.getBrand();
+                            preGrade = preItem.getGrade();
+                            preTemper = preItem.getTemper();
+                            System.out.println("â”‚    Pre-enriched: category=" + preProductCategory + " brand=" + preBrand);
+                        }
+                    }
+                }
+
+                // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+                // STEP 1: CHECK IF STOCK SUMMARY ENTRY EXISTS
+                // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+                System.out.println("â”‚ ðŸ” STEP 1: Checking for existing Stock Summary entry...");
+                System.out.println("â”‚    Search: unit='" + dto.getUnit() + "' store='" + entryStore
+                        + "' area='" + storageArea + "' rack='" + rackColumnBin + "'");
 
                 Optional<StockSummaryEntity> existingOpt = repository
                         .findByUnitAndItemDescriptionAndItemGroupAndStoreAndStorageAreaAndRackColumnShelfNumberAndDimension(
                                 dto.getUnit(),
                                 dto.getItemDescription(),
                                 targetItemGroup,
-                                targetStore,
+                                entryStore,
                                 storageArea,
                                 rackColumnBin,
                                 dimension);
@@ -918,14 +1001,10 @@ public class StockSummaryServiceImpl implements StockSummaryService {
                 StockSummaryEntity stockSummary;
 
                 if (existingOpt.isPresent()) {
-                    // ═══════════════════════════════════════════════════════════════════
-                    // EXISTING ENTRY FOUND - UPDATE QUANTITY & GRN
-                    // ═══════════════════════════════════════════════════════════════════
+                    // EXISTING ENTRY FOUND - UPDATE QUANTITY
                     stockSummary = existingOpt.get();
-                    System.out.println("│");
-                    System.out.println("│ ✅ FOUND EXISTING ENTRY - Stock ID: " + stockSummary.getId());
+                    System.out.println("â”‚ âœ… FOUND EXISTING ENTRY - Stock ID: " + stockSummary.getId());
 
-                    // Update quantity
                     BigDecimal existingQtyKg = stockSummary.getQuantityKg() != null ? stockSummary.getQuantityKg()
                             : BigDecimal.ZERO;
                     Integer existingQtyNo = stockSummary.getQuantityNo() != null ? stockSummary.getQuantityNo() : 0;
@@ -935,11 +1014,7 @@ public class StockSummaryServiceImpl implements StockSummaryService {
                     Integer newQtyNo = existingQtyNo
                             + (entry.getReturnQuantityNo() != null ? entry.getReturnQuantityNo() : 0);
 
-                    System.out.println("│    📊 QUANTITY UPDATE:");
-                    System.out.println("│       Qty BEFORE : " + existingQtyKg + " KG | " + existingQtyNo + " NO");
-                    System.out.println("│       Adding     : " + entry.getReturnQuantityKg() + " KG | "
-                            + entry.getReturnQuantityNo() + " NO");
-                    System.out.println("│       Qty AFTER  : " + newQtyKg + " KG | " + newQtyNo + " NO");
+                    System.out.println("â”‚    Qty: " + existingQtyKg + " â†’ " + newQtyKg + " KG");
 
                     stockSummary.setQuantityKg(newQtyKg);
                     stockSummary.setQuantityNo(newQtyNo);
@@ -955,28 +1030,34 @@ public class StockSummaryServiceImpl implements StockSummaryService {
                             }
                         }
                         stockSummary.setGrnNumbers(existingGrns);
-                        System.out.println("│    📝 GRN Numbers: " + existingGrns);
                     }
 
-                    // Update QR Code if provided
                     if (entry.getQrCode() != null && !entry.getQrCode().isEmpty()) {
                         stockSummary.setQrCode(entry.getQrCode());
                     }
 
+                    // Enrich with product details if missing
+                    if (stockSummary.getProductCategory() == null && preProductCategory != null)
+                        stockSummary.setProductCategory(preProductCategory);
+                    if (stockSummary.getBrand() == null && preBrand != null)
+                        stockSummary.setBrand(preBrand);
+                    if (stockSummary.getGrade() == null && preGrade != null)
+                        stockSummary.setGrade(preGrade);
+                    if (stockSummary.getTemper() == null && preTemper != null)
+                        stockSummary.setTemper(preTemper);
+                    if (stockSummary.getMaterialType() == null && preMaterialType != null)
+                        stockSummary.setMaterialType(preMaterialType);
+
                     stockSummary = repository.save(stockSummary);
-                    System.out.println("│");
-                    System.out.println("│ 💾 STOCK SUMMARY UPDATED - ID: " + stockSummary.getId());
+                    System.out.println("â”‚ ðŸ’¾ STOCK SUMMARY UPDATED - ID: " + stockSummary.getId());
 
                 } else {
-                    // ═══════════════════════════════════════════════════════════════════
-                    // NO EXISTING ENTRY - CREATE NEW STOCK SUMMARY
-                    // ═══════════════════════════════════════════════════════════════════
-                    System.out.println("│");
-                    System.out.println("│ 🆕 NO EXISTING ENTRY - CREATING NEW STOCK SUMMARY");
+                    // NO EXISTING ENTRY - CREATE NEW
+                    System.out.println("â”‚ ðŸ†• NO EXISTING ENTRY - CREATING NEW STOCK SUMMARY");
 
                     stockSummary = StockSummaryEntity.builder()
                             .unit(dto.getUnit())
-                            .store(targetStore)
+                            .store(entryStore)
                             .itemGroup(targetItemGroup)
                             .storageArea(storageArea)
                             .rackColumnShelfNumber(rackColumnBin)
@@ -986,29 +1067,67 @@ public class StockSummaryServiceImpl implements StockSummaryService {
                             .quantityNo(entry.getReturnQuantityNo())
                             .grnNumbers(grnNumber != null ? "[\"" + grnNumber + "\"]" : null)
                             .qrCode(entry.getQrCode())
+                            .productCategory(preProductCategory)
+                            .brand(preBrand)
+                            .grade(preGrade)
+                            .temper(preTemper)
+                            .materialType(preMaterialType)
                             .pickListLocked(false)
                             .reprintQr(false)
                             .build();
 
                     stockSummary = repository.save(stockSummary);
-                    System.out.println("│    ✅ NEW STOCK SUMMARY CREATED - ID: " + stockSummary.getId());
+                    System.out.println("â”‚    âœ… NEW STOCK SUMMARY CREATED - ID: " + stockSummary.getId());
                 }
 
                 savedEntities.add(stockSummary);
 
-                // ═══════════════════════════════════════════════════════════════════
-                // STEP 2: SAVE BUNDLE TO StockSummaryBundleEntity
-                // ═══════════════════════════════════════════════════════════════════
-                System.out.println("│");
-                System.out.println("│ 📦 STEP 2: Saving Bundle to StockSummaryBundleEntity...");
+                // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+                // STEP 2: SAVE BUNDLE TO StockSummaryBundleEntity (with GRN Item enrichment)
+                // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+                System.out.println("â”‚");
+                System.out.println("â”‚ ðŸ“¦ STEP 2: Saving Bundle to StockSummaryBundleEntity...");
 
-                // Get GRN details for bundle
+                // Lookup GRN entity for enrichment
                 GRNEntity grnEntity = null;
                 if (grnNumber != null && !grnNumber.isEmpty()) {
                     Optional<GRNEntity> grnOpt = grnRepository.findByGrnRefNumber(grnNumber);
                     if (grnOpt.isPresent()) {
                         grnEntity = grnOpt.get();
-                        System.out.println("│    Found GRN Entity: " + grnEntity.getGrnRefNumber());
+                        System.out.println("â”‚    Found GRN: " + grnEntity.getGrnRefNumber());
+                    }
+                }
+
+                // Enrichment fields from GRN Item
+                String enrichedHeatNo = null;
+                String enrichedLotNo = null;
+                String enrichedTestCertificate = null;
+                BigDecimal enrichedItemPrice = null;
+                String enrichedProductCategory = preProductCategory;
+                String enrichedBrand = preBrand;
+                String enrichedGrade = preGrade;
+                String enrichedTemper = preTemper;
+
+                if (grnEntity != null) {
+                    List<GRNItemEntity> grnItems = grnEntity.getGrnItems();
+                    if (grnItems != null && !grnItems.isEmpty()) {
+                        GRNItemEntity matchedItem = grnItems.stream()
+                                .filter(item -> dto.getItemDescription() != null &&
+                                        dto.getItemDescription().equalsIgnoreCase(item.getItemDescription()))
+                                .findFirst()
+                                .orElse(grnItems.get(0));
+
+                        enrichedHeatNo = matchedItem.getHeatNumber();
+                        enrichedLotNo = matchedItem.getLotNumber();
+                        enrichedTestCertificate = matchedItem.getTestCertificateNumber();
+                        enrichedItemPrice = matchedItem.getRate() != null ? BigDecimal.valueOf(matchedItem.getRate()) : null;
+                        enrichedProductCategory = matchedItem.getProductCategory();
+                        enrichedBrand = matchedItem.getBrand();
+                        enrichedGrade = matchedItem.getGrade();
+                        enrichedTemper = matchedItem.getTemper();
+
+                        System.out.println("â”‚    Enriched from GRN Item: heat=" + enrichedHeatNo
+                                + " lot=" + enrichedLotNo + " price=" + enrichedItemPrice);
                     }
                 }
 
@@ -1017,13 +1136,21 @@ public class StockSummaryServiceImpl implements StockSummaryService {
                         .grnNumber(grnNumber)
                         .grnId(grnEntity != null ? grnEntity.getId() : null)
                         .itemDescription(dto.getItemDescription())
+                        .productCategory(enrichedProductCategory)
+                        .brand(enrichedBrand)
+                        .grade(enrichedGrade)
+                        .temper(enrichedTemper)
                         .dimension(dimension)
                         .weightmentQuantityKg(entry.getReturnQuantityKg())
                         .weightmentQuantityNo(entry.getReturnQuantityNo())
-                        .currentStore(targetStore)
+                        .currentStore(entryStore)
                         .storageArea(storageArea)
                         .rackColumnBinNumber(rackColumnBin)
                         .poNumber(grnEntity != null ? grnEntity.getPoNumber() : null)
+                        .heatNo(enrichedHeatNo)
+                        .lotNo(enrichedLotNo)
+                        .testCertificate(enrichedTestCertificate)
+                        .itemPrice(enrichedItemPrice)
                         .qrCodeUrl(entry.getQrCode())
                         .status("RETURNED")
                         .transferType("RETURN_STOCK")
@@ -1032,32 +1159,73 @@ public class StockSummaryServiceImpl implements StockSummaryService {
                 StockSummaryBundleEntity savedBundle = stockSummaryBundleRepository.save(bundle);
                 savedBundles.add(savedBundle);
 
-                System.out.println("│    ✅ BUNDLE SAVED - ID: " + savedBundle.getId());
-                System.out.println("│       - Linked to Stock Summary ID: " + stockSummary.getId());
-                System.out.println("│       - GRN Number: " + grnNumber);
-                System.out.println("│       - Return Qty: " + entry.getReturnQuantityKg() + " KG | "
+                System.out.println("â”‚    âœ… BUNDLE SAVED - ID: " + savedBundle.getId());
+                System.out.println("â”‚       - Linked to Stock Summary ID: " + stockSummary.getId());
+                System.out.println("â”‚       - Return Qty: " + entry.getReturnQuantityKg() + " KG | "
                         + entry.getReturnQuantityNo() + " NO");
-                System.out.println("│       - Dimension: " + dimension);
-                System.out.println("└──────────────────────────────────────────────────────────────────────────────┘");
+
+                // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+                // STEP 3: UPDATE RACK & BIN MASTER currentStorage
+                // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+                System.out.println("â”‚");
+                System.out.println("â”‚ ðŸ—ï¸ STEP 3: Updating Rack & Bin Master currentStorage...");
+
+                if (rackColumnBin == null || rackColumnBin.isBlank() || "Common".equalsIgnoreCase(rackColumnBin)) {
+                    System.out.println("â”‚    â­ï¸ SKIP â€” rackColumnBin is null or 'Common'");
+                } else {
+                    try {
+                        String[] rackParts = rackColumnBin.split("-");
+                        if (rackParts.length >= 3) {
+                            String rackNo = rackParts[0];
+                            String columnNo = rackParts[1];
+                            String binNo = rackParts[2];
+
+                            System.out.println("â”‚    Searching: store='" + entryStore + "' area='" + storageArea +
+                                    "' rack='" + rackNo + "' col='" + columnNo + "' bin='" + binNo + "' unit='" + dto.getUnit() + "'");
+
+                            Optional<RackBinMasterEntity> rackOpt = rackBinMasterRepository
+                                    .findByStorageTypeAndStorageAreaAndRackNoAndColumnNoAndBinNoAndUnitName(
+                                            entryStore, storageArea, rackNo, columnNo, binNo, dto.getUnit());
+
+                            if (rackOpt.isPresent()) {
+                                RackBinMasterEntity rack = rackOpt.get();
+                                double existingStorage = rack.getCurrentStorage() != null ? rack.getCurrentStorage() : 0;
+                                double returnQty = entry.getReturnQuantityKg() != null ? entry.getReturnQuantityKg().doubleValue() : 0;
+                                double newStorage = existingStorage + returnQty;
+                                rack.setCurrentStorage(newStorage);
+                                rackBinMasterRepository.save(rack);
+                                System.out.println("â”‚    âœ… Rack Storage: " + existingStorage + " â†’ " + newStorage + " KG");
+                            } else {
+                                System.out.println("â”‚    âš ï¸ Rack not found â€” skipping storage update");
+                            }
+                        } else {
+                            System.out.println("â”‚    âš ï¸ Cannot parse rack: '" + rackColumnBin + "' (expected R-C-B format)");
+                        }
+                    } catch (Exception rackEx) {
+                        System.out.println("â”‚    âš ï¸ Error updating rack storage: " + rackEx.getMessage());
+                    }
+                }
+
+                System.out.println("â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜");
 
             } catch (Exception e) {
                 String error = "Error processing entry " + (i + 1) + ": " + e.getMessage();
-                System.out.println("│ ❌ ERROR: " + error);
-                System.out.println("└──────────────────────────────────────────────────────────────────────────────┘");
+                System.out.println("â”‚ âŒ ERROR: " + error);
+                System.out.println("â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜");
                 e.printStackTrace();
                 errors.add(error);
             }
         }
 
-        System.out.println("\n╔══════════════════════════════════════════════════════════════════════════════╗");
-        System.out.println("║            📊 RETURN STOCK SAVE - SUMMARY                                   ║");
-        System.out.println("╠══════════════════════════════════════════════════════════════════════════════╣");
-        System.out.println("║ Entries Processed     : " + dto.getReturnEntries().size());
-        System.out.println("║ Stock Summaries Saved : " + savedEntities.size());
-        System.out.println("║ Bundles Saved         : " + savedBundles.size());
-        System.out.println("║ Errors                : " + errors.size());
-        System.out.println("║ Status                : " + (errors.isEmpty() ? "✅ SUCCESS" : "⚠️ PARTIAL SUCCESS"));
-        System.out.println("╚══════════════════════════════════════════════════════════════════════════════╝\n");
+        System.out.println("\nâ•”â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•—");
+        System.out.println("â•‘            ðŸ“Š RETURN STOCK SAVE - SUMMARY                                   â•‘");
+        System.out.println("â• â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•£");
+        System.out.println("â•‘ Entries Processed     : " + dto.getReturnEntries().size());
+        System.out.println("â•‘ Stock Summaries Saved : " + savedEntities.size());
+        System.out.println("â•‘ Bundles Saved         : " + savedBundles.size());
+        System.out.println("â•‘ Errors                : " + errors.size());
+        System.out.println("â•‘ Status                : " + (errors.isEmpty() ? "âœ… SUCCESS" : "âš ï¸ PARTIAL SUCCESS"));
+        System.out.println("â•šâ•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•\n");
 
         java.util.Map<String, Object> response = new java.util.LinkedHashMap<>();
         response.put("success", errors.isEmpty());
@@ -1074,371 +1242,16 @@ public class StockSummaryServiceImpl implements StockSummaryService {
         return response;
     }
 
-    /*
-     * //
-     * ═════════════════════════════════════════════════════════════════════════════
-     * ══
-     * // OLD saveReturnStock METHOD - COMMENTED OUT
-     * //
-     * ═════════════════════════════════════════════════════════════════════════════
-     * ══
-     * 
-     * @Override
-     * 
-     * @Transactional
-     * public java.util.Map<String, Object> saveReturnStock_OLD(ReturnStockDTO dto)
-     * {
-     * System.out.println(
-     * "\n╔══════════════════════════════════════════════════════════════════════════════╗"
-     * );
-     * System.out.
-     * println("║            📦 RETURN STOCK SAVE - STOCK SUMMARY                             ║"
-     * );
-     * System.out.println(
-     * "╚══════════════════════════════════════════════════════════════════════════════╝"
-     * );
-     * System.out.println(
-     * "┌──────────────────────────────────────────────────────────────────────────────┐"
-     * );
-     * System.out.
-     * println("│ INPUT PARAMETERS                                                            │"
-     * );
-     * System.out.println(
-     * "├──────────────────────────────────────────────────────────────────────────────┤"
-     * );
-     * System.out.println("│ Unit           : " + dto.getUnit());
-     * System.out.println("│ Item Desc      : " + dto.getItemDescription());
-     * System.out.println("│ Return Entries : " + (dto.getReturnEntries() != null ?
-     * dto.getReturnEntries().size() : 0));
-     * System.out.println("│ Target Store   : Loose Piece (fixed)");
-     * System.out.println(
-     * "└──────────────────────────────────────────────────────────────────────────────┘"
-     * );
-     * 
-     * List<StockSummaryEntity> savedEntities = new java.util.ArrayList<>();
-     * List<String> errors = new java.util.ArrayList<>();
-     * 
-     * String targetStore = "Loose Piece"; // Store is always "Loose Piece"
-     * 
-     * if (dto.getReturnEntries() == null || dto.getReturnEntries().isEmpty()) {
-     * System.out.println("\n⚠️ No return entries provided - ABORTING");
-     * return java.util.Map.of(
-     * "success", false,
-     * "message", "No return entries provided",
-     * "savedCount", 0
-     * );
-     * }
-     * 
-     * for (int i = 0; i < dto.getReturnEntries().size(); i++) {
-     * ReturnStockDTO.ReturnEntryDTO entry = dto.getReturnEntries().get(i);
-     * 
-     * System.out.println("\n┌─ ENTRY [" + (i + 1) + "/" +
-     * dto.getReturnEntries().size() +
-     * "] ────────────────────────────────────────────────────────┐");
-     * System.out.println("│ 📋 ENTRY DETAILS:");
-     * System.out.println("│    Batch Number     : " + entry.getBatchNumber());
-     * System.out.println("│    Date of Inward   : " + entry.getDateOfInward());
-     * System.out.println("│    Return Qty       : " + entry.getReturnQuantityKg() +
-     * " KG | " + entry.getReturnQuantityNo() + " NO");
-     * System.out.println("│    Storage Area     : " + entry.getStorageArea());
-     * System.out.println("│    Rack/Bin         : " + entry.getRackColumnBin());
-     * System.out.println("│    Dimension        : " + entry.getDimension());
-     * System.out.println("│    Allocation Status: " + entry.getAllocationStatus());
-     * System.out.println("│    QR Code          : " + (entry.getQrCode() != null ?
-     * entry.getQrCode().substring(0, Math.min(50, entry.getQrCode().length())) +
-     * "..." : "null"));
-     * System.out.println(
-     * "├──────────────────────────────────────────────────────────────────────────────┤"
-     * );
-     * 
-     * try {
-     * String storageArea = entry.getStorageArea() != null ? entry.getStorageArea()
-     * : "Common";
-     * String rackColumnBin = entry.getRackColumnBin() != null ?
-     * entry.getRackColumnBin() : "Common";
-     * 
-     * // Check if same unit + item description + Loose Piece store + storage area +
-     * rack exists
-     * System.out.
-     * println("│ 🔍 STEP 1: Checking for existing Stock Summary entry...");
-     * System.out.println("│    Search Criteria:");
-     * System.out.println("│       - Unit        : '" + dto.getUnit() + "'");
-     * System.out.println("│       - ItemDesc    : '" + dto.getItemDescription() +
-     * "'");
-     * System.out.println("│       - ItemGroup   : 'RAW MATERIAL'");
-     * System.out.println("│       - Store       : '" + targetStore + "'");
-     * System.out.println("│       - StorageArea : '" + storageArea + "'");
-     * System.out.println("│       - Rack        : '" + rackColumnBin + "'");
-     * System.out.println("│       - Dimension   : '" + entry.getDimension() + "'");
-     * 
-     * // Search by unit + itemDesc + itemGroup(RAW MATERIAL) + store + storageArea
-     * + rack + dimension
-     * Optional<StockSummaryEntity> existingOpt = repository.
-     * findByUnitAndItemDescriptionAndItemGroupAndStoreAndStorageAreaAndRackColumnShelfNumberAndDimension(
-     * dto.getUnit(),
-     * dto.getItemDescription(),
-     * "RAW MATERIAL",
-     * targetStore,
-     * storageArea,
-     * rackColumnBin,
-     * entry.getDimension()
-     * );
-     * 
-     * if (existingOpt.isPresent()) {
-     * // Update existing entry
-     * StockSummaryEntity existing = existingOpt.get();
-     * System.out.println("│");
-     * System.out.println("│ ✅ FOUND EXISTING ENTRY - UPDATING");
-     * System.out.println("│    Stock ID: " + existing.getId());
-     * System.out.println("│    Current Dimension: " + existing.getDimension());
-     * 
-     * java.math.BigDecimal existingQtyKg = existing.getQuantityKg() != null ?
-     * existing.getQuantityKg() : java.math.BigDecimal.ZERO;
-     * Integer existingQtyNo = existing.getQuantityNo() != null ?
-     * existing.getQuantityNo() : 0;
-     * 
-     * java.math.BigDecimal newQtyKg = existingQtyKg.add(entry.getReturnQuantityKg()
-     * != null ? entry.getReturnQuantityKg() : java.math.BigDecimal.ZERO);
-     * Integer newQtyNo = existingQtyNo + (entry.getReturnQuantityNo() != null ?
-     * entry.getReturnQuantityNo() : 0);
-     * 
-     * System.out.println("│");
-     * System.out.println("│    📊 QUANTITY UPDATE:");
-     * System.out.println("│       Qty BEFORE : " + existingQtyKg + " KG | " +
-     * existingQtyNo + " NO");
-     * System.out.println("│       Adding     : " + entry.getReturnQuantityKg() +
-     * " KG | " + entry.getReturnQuantityNo() + " NO");
-     * System.out.println("│       Qty AFTER  : " + newQtyKg + " KG | " + newQtyNo +
-     * " NO");
-     * 
-     * existing.setQuantityKg(newQtyKg);
-     * existing.setQuantityNo(newQtyNo);
-     * 
-     * // Update dimension if provided
-     * if (entry.getDimension() != null && !entry.getDimension().isEmpty()) {
-     * String oldDim = existing.getDimension();
-     * existing.setDimension(entry.getDimension());
-     * System.out.println("│");
-     * System.out.println("│    📐 DIMENSION UPDATE:");
-     * System.out.println("│       Old Dimension: " + oldDim);
-     * System.out.println("│       New Dimension: " + entry.getDimension());
-     * }
-     * 
-     * // Append GRN to grnNumbers if batch number provided
-     * if (entry.getBatchNumber() != null && !entry.getBatchNumber().isEmpty()) {
-     * String existingGrns = existing.getGrnNumbers();
-     * String grnsBefore = existingGrns;
-     * if (existingGrns == null || existingGrns.isEmpty() ||
-     * existingGrns.equals("[]")) {
-     * existingGrns = "[\"" + entry.getBatchNumber() + "\"]";
-     * } else {
-     * if (!existingGrns.contains("\"" + entry.getBatchNumber() + "\"")) {
-     * existingGrns = existingGrns.replace("]", ",\"" + entry.getBatchNumber() +
-     * "\"]");
-     * }
-     * }
-     * existing.setGrnNumbers(existingGrns);
-     * System.out.println("│");
-     * System.out.println("│    📝 GRN UPDATE:");
-     * System.out.println("│       GRNs BEFORE: " + grnsBefore);
-     * System.out.println("│       GRNs AFTER : " + existingGrns);
-     * }
-     * 
-     * // Store QR Code if provided
-     * if (entry.getQrCode() != null && !entry.getQrCode().isEmpty()) {
-     * existing.setQrCode(entry.getQrCode());
-     * System.out.println("│    QR Code Set   : ✅");
-     * }
-     * 
-     * StockSummaryEntity saved = repository.save(existing);
-     * savedEntities.add(saved);
-     * System.out.println("│");
-     * System.out.println("│ 💾 STOCK SUMMARY SAVED - Stock ID: " + saved.getId());
-     * 
-     * // ═══════════════════════════════════════════════════════════════════
-     * // STEP 2: SAVE BUNDLE TO StockSummaryBundleEntity
-     * // ═══════════════════════════════════════════════════════════════════
-     * System.out.println("│");
-     * System.out.
-     * println("│ 📦 STEP 2: Saving Bundle to StockSummaryBundleEntity...");
-     * 
-     * // Get GRN details for bundle
-     * GRNEntity grnEntity = null;
-     * if (entry.getBatchNumber() != null && !entry.getBatchNumber().isEmpty()) {
-     * Optional<GRNEntity> grnOpt =
-     * grnRepository.findByGrnRefNumber(entry.getBatchNumber());
-     * if (grnOpt.isPresent()) {
-     * grnEntity = grnOpt.get();
-     * System.out.println("│    Found GRN: " + grnEntity.getGrnRefNumber());
-     * }
-     * }
-     * 
-     * StockSummaryBundleEntity returnBundle = StockSummaryBundleEntity.builder()
-     * .stockSummary(saved)
-     * .grnNumber(entry.getBatchNumber())
-     * .grnId(grnEntity != null ? grnEntity.getId() : null)
-     * .itemDescription(dto.getItemDescription())
-     * .dimension(entry.getDimension())
-     * .weightmentQuantityKg(entry.getReturnQuantityKg())
-     * .weightmentQuantityNo(entry.getReturnQuantityNo())
-     * .currentStore(targetStore)
-     * .storageArea(storageArea)
-     * .rackColumnBinNumber(rackColumnBin)
-     * .poNumber(grnEntity != null ? grnEntity.getPoNumber() : null)
-     * .status("RETURNED")
-     * .transferType("RETURN_STOCK")
-     * .qrCodeUrl(entry.getQrCode())
-     * .build();
-     * 
-     * StockSummaryBundleEntity savedBundle =
-     * stockSummaryBundleRepository.save(returnBundle);
-     * System.out.println("│    ✅ Bundle SAVED - ID: " + savedBundle.getId());
-     * System.out.println("│       - Linked to Stock Summary ID: " + saved.getId());
-     * System.out.println("│       - Return Qty: " + entry.getReturnQuantityKg() +
-     * " KG | " + entry.getReturnQuantityNo() + " NO");
-     * System.out.println("│       - Dimension: " + entry.getDimension());
-     * 
-     * } else {
-     * // Create new entry
-     * System.out.println("│");
-     * System.out.println("│ 🆕 NO EXISTING ENTRY FOUND - CREATING NEW");
-     * System.out.println("│    New Entry Details:");
-     * System.out.println("│       - Unit        : " + dto.getUnit());
-     * System.out.println("│       - Store       : " + targetStore);
-     * System.out.println("│       - StorageArea : " + storageArea);
-     * System.out.println("│       - Rack        : " + rackColumnBin);
-     * System.out.println("│       - ItemDesc    : " + dto.getItemDescription());
-     * System.out.println("│       - Dimension   : " + entry.getDimension());
-     * System.out.println("│       - Qty KG      : " + entry.getReturnQuantityKg());
-     * System.out.println("│       - Qty NO      : " + entry.getReturnQuantityNo());
-     * System.out.println("│       - GRN         : " + entry.getBatchNumber());
-     * 
-     * StockSummaryEntity newStock = StockSummaryEntity.builder()
-     * .unit(dto.getUnit())
-     * .store(targetStore)
-     * .itemGroup("RAW MATERIAL")
-     * .storageArea(storageArea)
-     * .rackColumnShelfNumber(rackColumnBin)
-     * .itemDescription(dto.getItemDescription())
-     * .dimension(entry.getDimension())
-     * .quantityKg(entry.getReturnQuantityKg())
-     * .quantityNo(entry.getReturnQuantityNo())
-     * .grnNumbers(entry.getBatchNumber() != null ? "[\"" + entry.getBatchNumber() +
-     * "\"]" : null)
-     * .pickListLocked(false)
-     * .reprintQr(false)
-     * .build();
-     * 
-     * // Set QR Code after build
-     * if (entry.getQrCode() != null && !entry.getQrCode().isEmpty()) {
-     * newStock.setQrCode(entry.getQrCode());
-     * System.out.println("│       - QR Code    : Set ✅");
-     * }
-     * 
-     * StockSummaryEntity saved = repository.save(newStock);
-     * savedEntities.add(saved);
-     * System.out.println("│");
-     * System.out.println("│ 💾 STOCK SUMMARY CREATED - Stock ID: " +
-     * saved.getId());
-     * 
-     * // ═══════════════════════════════════════════════════════════════════
-     * // STEP 2: SAVE BUNDLE TO StockSummaryBundleEntity (for new entry)
-     * // ═══════════════════════════════════════════════════════════════════
-     * System.out.println("│");
-     * System.out.
-     * println("│ 📦 STEP 2: Saving Bundle to StockSummaryBundleEntity...");
-     * 
-     * // Get GRN details for bundle
-     * GRNEntity grnEntityNew = null;
-     * if (entry.getBatchNumber() != null && !entry.getBatchNumber().isEmpty()) {
-     * Optional<GRNEntity> grnOptNew =
-     * grnRepository.findByGrnRefNumber(entry.getBatchNumber());
-     * if (grnOptNew.isPresent()) {
-     * grnEntityNew = grnOptNew.get();
-     * System.out.println("│    Found GRN: " + grnEntityNew.getGrnRefNumber());
-     * }
-     * }
-     * 
-     * StockSummaryBundleEntity newBundle = StockSummaryBundleEntity.builder()
-     * .stockSummary(saved)
-     * .grnNumber(entry.getBatchNumber())
-     * .grnId(grnEntityNew != null ? grnEntityNew.getId() : null)
-     * .itemDescription(dto.getItemDescription())
-     * .dimension(entry.getDimension())
-     * .weightmentQuantityKg(entry.getReturnQuantityKg())
-     * .weightmentQuantityNo(entry.getReturnQuantityNo())
-     * .currentStore(targetStore)
-     * .storageArea(storageArea)
-     * .rackColumnBinNumber(rackColumnBin)
-     * .poNumber(grnEntityNew != null ? grnEntityNew.getPoNumber() : null)
-     * .status("RETURNED")
-     * .transferType("RETURN_STOCK")
-     * .qrCodeUrl(entry.getQrCode())
-     * .build();
-     * 
-     * StockSummaryBundleEntity savedNewBundle =
-     * stockSummaryBundleRepository.save(newBundle);
-     * System.out.println("│    ✅ Bundle SAVED - ID: " + savedNewBundle.getId());
-     * System.out.println("│       - Linked to Stock Summary ID: " + saved.getId());
-     * System.out.println("│       - Return Qty: " + entry.getReturnQuantityKg() +
-     * " KG | " + entry.getReturnQuantityNo() + " NO");
-     * System.out.println("│       - Dimension: " + entry.getDimension());
-     * }
-     * System.out.println(
-     * "└──────────────────────────────────────────────────────────────────────────────┘"
-     * );
-     * 
-     * } catch (Exception e) {
-     * String error = "Error processing entry " + (i + 1) + ": " + e.getMessage();
-     * System.out.println("│ ❌ ERROR: " + error);
-     * System.out.println(
-     * "└──────────────────────────────────────────────────────────────────────────────┘"
-     * );
-     * errors.add(error);
-     * }
-     * }
-     * 
-     * System.out.println(
-     * "\n╔══════════════════════════════════════════════════════════════════════════════╗"
-     * );
-     * System.out.
-     * println("║            📊 RETURN STOCK SAVE - SUMMARY                                   ║"
-     * );
-     * System.out.println(
-     * "╠══════════════════════════════════════════════════════════════════════════════╣"
-     * );
-     * System.out.println("║ Entries Processed : " + dto.getReturnEntries().size());
-     * System.out.println("║ Successfully Saved: " + savedEntities.size());
-     * System.out.println("║ Errors            : " + errors.size());
-     * System.out.println("║ Status            : " + (errors.isEmpty() ? "✅ SUCCESS"
-     * : "⚠️ PARTIAL SUCCESS"));
-     * System.out.println(
-     * "╚══════════════════════════════════════════════════════════════════════════════╝\n"
-     * );
-     * 
-     * java.util.Map<String, Object> response = new java.util.LinkedHashMap<>();
-     * response.put("success", errors.isEmpty());
-     * response.put("message", errors.isEmpty() ? "Return stock saved successfully"
-     * : "Return stock saved with some errors");
-     * response.put("savedCount", savedEntities.size());
-     * response.put("errorCount", errors.size());
-     * if (!errors.isEmpty()) {
-     * response.put("errors", errors);
-     * }
-     * response.put("data", savedEntities);
-     * 
-     * return response;
-     * }
-     */
-    // ═══════════════════════════════════════════════════════════════════════════════
-    // END OF OLD saveReturnStock METHOD
-    // ═══════════════════════════════════════════════════════════════════════════════
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+    // END OF saveReturnStock METHOD
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+
 
     @Override
     public AllocateReturnRackDTO.SuggestedRackDTO allocateReturnRack(AllocateReturnRackDTO dto) {
-        log.info("\n══════════════════════════════════════════════════════════════════════════");
-        log.info("🏗️ [AllocateReturnRack] ALLOCATING RACK FOR RETURN STOCK");
-        log.info("══════════════════════════════════════════════════════════════════════════");
+        log.info("\nâ•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•");
+        log.info("ðŸ—ï¸ [AllocateReturnRack] ALLOCATING RACK FOR RETURN STOCK");
+        log.info("â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•");
         log.info("   Unit: {}", dto.getUnit());
         log.info("   Item Description: {}", dto.getItemDescription());
         log.info("   Product Category: {}", dto.getProductCategory());
@@ -1447,113 +1260,197 @@ public class StockSummaryServiceImpl implements StockSummaryService {
         String targetStore = "LOOSE PIECE STORAGE"; // Always Loose Piece
 
         try {
-            // STEP 1: Find all racks matching Product Category
-            log.info("\n   📍 STEP 1: Finding racks by Product Category...");
-            log.info("      Product Category: {}", dto.getProductCategory());
+            // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+            // STEP 1: Filter by Store â€” find all racks where storageType matches
+            //         "Loose Piece Storage" (case-insensitive, contains-based)
+            // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+            log.info("\n   ðŸ“ STEP 1: Finding racks by Store (Loose Piece Storage)...");
 
-            List<RackBinMasterEntity> matchingRacks = rackBinMasterRepository
-                    .findByItemCategory(dto.getProductCategory());
-            log.info("      Found {} racks with category: {}", matchingRacks.size(), dto.getProductCategory());
+            // Get ALL racks for this unit, then filter by store containing "LOOSE"
+            List<RackBinMasterEntity> allRacks = rackBinMasterRepository.findAll();
+            log.info("      Total racks in database: {}", allRacks.size());
 
-            if (matchingRacks.isEmpty()) {
-                log.warn("      ⚠️ No racks found for product category: {}", dto.getProductCategory());
-                return null;
+            // Filter by unit name AND loose piece store
+            List<RackBinMasterEntity> storeFilteredRacks = allRacks.stream()
+                    .filter(rack -> {
+                        // Unit match
+                        String rackUnit = rack.getUnitName() != null ? rack.getUnitName().trim() : "";
+                        boolean unitMatch = dto.getUnit() != null && dto.getUnit().trim().equalsIgnoreCase(rackUnit);
+                        if (!unitMatch) return false;
+
+                        // Store match: storageType contains "LOOSE"
+                        String storageType = rack.getStorageType() != null ? rack.getStorageType().toUpperCase() : "";
+                        return storageType.contains("LOOSE");
+                    })
+                    .toList();
+
+            log.info("      Found {} racks for store 'Loose Piece Storage' and unit '{}'", storeFilteredRacks.size(), dto.getUnit());
+
+            if (storeFilteredRacks.isEmpty()) {
+                log.warn("      âš ï¸ No loose piece racks found for unit â€” returning store without rack details");
+                return AllocateReturnRackDTO.SuggestedRackDTO.builder()
+                        .store(targetStore)
+                        .storageArea("")
+                        .rackColumnBin("")
+                        .availableCapacity(0.0)
+                        .distance(0.0)
+                        .storageAreaOrder(0)
+                        .itemCategory(dto.getProductCategory())
+                        .isAllocated(true)
+                        .build();
             }
 
-            // STEP 2: Filter racks with available capacity
-            log.info("\n   📍 STEP 2: Filtering racks by available capacity...");
+            // Log all found racks for debugging
+            for (RackBinMasterEntity rack : storeFilteredRacks) {
+                log.info("      â†’ Rack: {}/{}/{} | Category: {} | Capacity: {} | Current: {} | Area: {}",
+                        rack.getRackNo(), rack.getColumnNo(), rack.getBinNo(),
+                        rack.getItemCategory(), rack.getBinCapacity(),
+                        rack.getCurrentStorage(), rack.getStorageArea());
+            }
+
+            // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+            // STEP 2: Filter by Category + Fallback to "ALL"
+            // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+            log.info("\n   ðŸ“ STEP 2: Filtering by Product Category: '{}'...", dto.getProductCategory());
+
+            String requestedCategory = dto.getProductCategory() != null ? dto.getProductCategory().trim() : "";
+            boolean usedFallback = false;
+
+            List<RackBinMasterEntity> categoryFilteredRacks = storeFilteredRacks.stream()
+                    .filter(rack -> {
+                        String rackCategory = rack.getItemCategory() != null ? rack.getItemCategory().trim() : "";
+                        return rackCategory.equalsIgnoreCase(requestedCategory);
+                    })
+                    .toList();
+
+            log.info("      Found {} racks matching category '{}'", categoryFilteredRacks.size(), requestedCategory);
+
+            // Fallback to "ALL" category
+            if (categoryFilteredRacks.isEmpty()) {
+                log.info("      âš ï¸ No racks for category '{}', falling back to 'ALL'...", requestedCategory);
+                categoryFilteredRacks = storeFilteredRacks.stream()
+                        .filter(rack -> {
+                            String rackCategory = rack.getItemCategory() != null ? rack.getItemCategory().trim() : "";
+                            return rackCategory.equalsIgnoreCase("ALL");
+                        })
+                        .toList();
+                usedFallback = true;
+                log.info("      Found {} racks with category 'ALL'", categoryFilteredRacks.size());
+            }
+
+            // If still empty, use ALL loose piece racks regardless of category
+            if (categoryFilteredRacks.isEmpty()) {
+                log.info("      âš ï¸ No 'ALL' category racks either â€” using ALL loose piece racks");
+                categoryFilteredRacks = storeFilteredRacks;
+                usedFallback = true;
+            }
+
+            // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+            // STEP 3: Filter by Capacity (availableSpace >= returnQuantityKg)
+            // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+            log.info("\n   ðŸ“ STEP 3: Filtering by available capacity...");
             log.info("      Required Capacity: {} KG", dto.getReturnQuantityKg());
 
             double requiredQty = dto.getReturnQuantityKg().doubleValue();
 
-            List<RackBinMasterEntity> availableRacks = matchingRacks.stream()
+            List<RackBinMasterEntity> capacityFilteredRacks = categoryFilteredRacks.stream()
                     .filter(rack -> {
                         double binCapacity = 0;
                         try {
-                            binCapacity = Double
-                                    .parseDouble(rack.getBinCapacity() != null ? rack.getBinCapacity() : "0");
+                            binCapacity = Double.parseDouble(rack.getBinCapacity() != null ? rack.getBinCapacity() : "0");
                         } catch (NumberFormatException e) {
-                            log.warn("      ⚠️ Invalid bin capacity: {}", rack.getBinCapacity());
+                            log.warn("      âš ï¸ Invalid bin capacity: {}", rack.getBinCapacity());
                         }
-
                         double currentStorage = rack.getCurrentStorage() != null ? rack.getCurrentStorage() : 0;
-                        double availableCapacity = binCapacity - currentStorage;
+                        double availableSpace = binCapacity - currentStorage;
+                        boolean hasCapacity = availableSpace >= requiredQty;
 
-                        boolean hasCapacity = availableCapacity >= requiredQty;
-
-                        if (hasCapacity) {
-                            log.info("      ✅ Rack: {}/{}/{} - Capacity: {} KG, Current: {} KG, Available: {} KG",
-                                    rack.getStorageArea(), rack.getRackNo(), rack.getBinNo(),
-                                    binCapacity, currentStorage, availableCapacity);
-                        }
+                        log.info("      {} Rack: {}/{}/{} â€” Capacity: {} KG, Current: {} KG, Available: {} KG",
+                                hasCapacity ? "âœ…" : "âŒ",
+                                rack.getRackNo(), rack.getColumnNo(), rack.getBinNo(),
+                                binCapacity, currentStorage, availableSpace);
 
                         return hasCapacity;
                     })
                     .toList();
 
-            log.info("      Found {} racks with available capacity", availableRacks.size());
+            log.info("      Found {} racks with sufficient capacity", capacityFilteredRacks.size());
 
-            if (availableRacks.isEmpty()) {
-                log.warn("      ⚠️ No racks with sufficient capacity");
-                return null;
+            // If no capacity after category filter, backtrack to ALL categories
+            if (capacityFilteredRacks.isEmpty() && !usedFallback) {
+                log.info("      âš ï¸ No capacity for category '{}', backtracking to ALL loose piece racks...", requestedCategory);
+                capacityFilteredRacks = storeFilteredRacks.stream()
+                        .filter(rack -> {
+                            double binCapacity = 0;
+                            try {
+                                binCapacity = Double.parseDouble(rack.getBinCapacity() != null ? rack.getBinCapacity() : "0");
+                            } catch (NumberFormatException e) { /* ignore */ }
+                            double currentStorage = rack.getCurrentStorage() != null ? rack.getCurrentStorage() : 0;
+                            return (binCapacity - currentStorage) >= requiredQty;
+                        })
+                        .toList();
+                log.info("      Found {} racks after backtrack", capacityFilteredRacks.size());
             }
 
-            // STEP 3: Sort by Storage Area Order (ascending) and Distance (ascending)
-            log.info("\n   📍 STEP 3: Sorting by Storage Area Order & Distance...");
+            if (capacityFilteredRacks.isEmpty()) {
+                log.warn("      âš ï¸ No racks with sufficient capacity â€” returning store without rack details");
+                return AllocateReturnRackDTO.SuggestedRackDTO.builder()
+                        .store(targetStore)
+                        .storageArea("")
+                        .rackColumnBin("")
+                        .availableCapacity(0.0)
+                        .distance(0.0)
+                        .storageAreaOrder(0)
+                        .itemCategory(dto.getProductCategory())
+                        .isAllocated(true)
+                        .build();
+            }
 
-            RackBinMasterEntity bestRack = availableRacks.stream()
-                    .sorted((r1, r2) -> {
-                        // First sort by Storage Area Order (ascending)
-                        Integer order1 = r1.getStorageAreaOrder() != null ? r1.getStorageAreaOrder()
-                                : Integer.MAX_VALUE;
-                        Integer order2 = r2.getStorageAreaOrder() != null ? r2.getStorageAreaOrder()
-                                : Integer.MAX_VALUE;
+            // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+            // STEP 4: Min storage_area_order (keep only bins with LOWEST order)
+            // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+            log.info("\n   ðŸ“ STEP 4: Selecting bins with minimum storage_area_order...");
 
-                        int orderComparison = order1.compareTo(order2);
-                        if (orderComparison != 0) {
-                            return orderComparison;
-                        }
+            Integer minOrder = capacityFilteredRacks.stream()
+                    .map(r -> r.getStorageAreaOrder() != null ? r.getStorageAreaOrder() : Integer.MAX_VALUE)
+                    .min(Integer::compareTo)
+                    .orElse(Integer.MAX_VALUE);
 
-                        // Then sort by Distance (ascending)
-                        Double distance1 = r1.getDistance() != null ? r1.getDistance() : Double.MAX_VALUE;
-                        Double distance2 = r2.getDistance() != null ? r2.getDistance() : Double.MAX_VALUE;
+            log.info("      Minimum storage_area_order: {}", minOrder == Integer.MAX_VALUE ? "N/A" : minOrder);
 
-                        return distance1.compareTo(distance2);
+            List<RackBinMasterEntity> minOrderRacks = capacityFilteredRacks.stream()
+                    .filter(r -> {
+                        Integer order = r.getStorageAreaOrder() != null ? r.getStorageAreaOrder() : Integer.MAX_VALUE;
+                        return order.equals(minOrder);
                     })
-                    .findFirst()
+                    .toList();
+
+            log.info("      Found {} racks with minimum order", minOrderRacks.size());
+
+            // If only 1, return it
+            if (minOrderRacks.size() == 1) {
+                RackBinMasterEntity bestRack = minOrderRacks.get(0);
+                log.info("      âœ… SINGLE BEST RACK â€” returning immediately");
+                return buildSuggestedRack(bestRack, targetStore);
+            }
+
+            // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+            // STEP 5: Min Distance (select bin with SMALLEST distance)
+            // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+            log.info("\n   ðŸ“ STEP 5: Selecting bin with minimum distance...");
+
+            RackBinMasterEntity bestRack = minOrderRacks.stream()
+                    .min(Comparator.comparing(r -> r.getDistance() != null ? r.getDistance() : Double.MAX_VALUE))
                     .orElse(null);
 
             if (bestRack == null) {
-                log.warn("      ⚠️ No suitable rack found after sorting");
+                log.warn("      âš ï¸ No suitable rack found after sorting");
                 return null;
             }
 
-            // STEP 4: Build and return suggested rack
-            log.info("\n   📍 STEP 4: Building suggested rack response...");
+            AllocateReturnRackDTO.SuggestedRackDTO suggested = buildSuggestedRack(bestRack, targetStore);
 
-            String rackColumnBin = bestRack.getRackNo() + "-" + bestRack.getColumnNo() + "-" + bestRack.getBinNo();
-
-            double binCapacity = 0;
-            try {
-                binCapacity = Double.parseDouble(bestRack.getBinCapacity() != null ? bestRack.getBinCapacity() : "0");
-            } catch (NumberFormatException e) {
-                log.warn("      ⚠️ Invalid bin capacity: {}", bestRack.getBinCapacity());
-            }
-            double currentStorage = bestRack.getCurrentStorage() != null ? bestRack.getCurrentStorage() : 0;
-            double availableCapacity = binCapacity - currentStorage;
-
-            AllocateReturnRackDTO.SuggestedRackDTO suggested = AllocateReturnRackDTO.SuggestedRackDTO.builder()
-                    .store(targetStore)
-                    .storageArea(bestRack.getStorageArea())
-                    .rackColumnBin(rackColumnBin)
-                    .availableCapacity(availableCapacity)
-                    .distance(bestRack.getDistance())
-                    .storageAreaOrder(bestRack.getStorageAreaOrder())
-                    .itemCategory(bestRack.getItemCategory())
-                    .isAllocated(true)
-                    .build();
-
-            log.info("      ✅ ALLOCATED RACK:");
+            log.info("      âœ… ALLOCATED RACK:");
             log.info("         Store: {}", suggested.getStore());
             log.info("         Storage Area: {}", suggested.getStorageArea());
             log.info("         Rack/Bin: {}", suggested.getRackColumnBin());
@@ -1561,28 +1458,50 @@ public class StockSummaryServiceImpl implements StockSummaryService {
             log.info("         Distance: {}", suggested.getDistance());
             log.info("         Storage Area Order: {}", suggested.getStorageAreaOrder());
 
-            log.info("\n══════════════════════════════════════════════════════════════════════════");
-            log.info("✅ [AllocateReturnRack] COMPLETE");
-            log.info("══════════════════════════════════════════════════════════════════════════\n");
+            log.info("\nâ•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•");
+            log.info("âœ… [AllocateReturnRack] COMPLETE");
+            log.info("â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•\n");
 
             return suggested;
 
         } catch (Exception e) {
-            log.error("   ❌ Error allocating rack: {}", e.getMessage(), e);
+            log.error("   âŒ Error allocating rack: {}", e.getMessage(), e);
             return null;
         }
+    }
+
+    private AllocateReturnRackDTO.SuggestedRackDTO buildSuggestedRack(RackBinMasterEntity rack, String store) {
+        String rackColumnBin = rack.getRackNo() + "-" + rack.getColumnNo() + "-" + rack.getBinNo();
+
+        double binCapacity = 0;
+        try {
+            binCapacity = Double.parseDouble(rack.getBinCapacity() != null ? rack.getBinCapacity() : "0");
+        } catch (NumberFormatException e) { /* ignore */ }
+        double currentStorage = rack.getCurrentStorage() != null ? rack.getCurrentStorage() : 0;
+        double availableCapacity = binCapacity - currentStorage;
+
+        return AllocateReturnRackDTO.SuggestedRackDTO.builder()
+                .store(rack.getStorageType() != null ? rack.getStorageType() : store)
+                .storageArea(rack.getStorageArea())
+                .rackColumnBin(rackColumnBin)
+                .availableCapacity(availableCapacity)
+                .distance(rack.getDistance())
+                .storageAreaOrder(rack.getStorageAreaOrder())
+                .itemCategory(rack.getItemCategory())
+                .isAllocated(true)
+                .build();
     }
 
     @Override
     @Transactional(readOnly = true)
     public List<StockSummaryWithBundlesDTO> getAllWithBundles() {
-        log.info("\n══════════════════════════════════════════════════════════════════════════");
-        log.info("📦 [StockSummary] GET ALL WITH BUNDLES - Fetching all stock summaries with GRN data");
-        log.info("══════════════════════════════════════════════════════════════════════════\n");
+        log.info("\nâ•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•");
+        log.info("ðŸ“¦ [StockSummary] GET ALL WITH BUNDLES - Fetching all stock summaries with GRN data");
+        log.info("â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•\n");
 
         try {
             List<StockSummaryEntity> allStockSummaries = repository.findAll();
-            log.info("   📊 Total stock summaries found: {}", allStockSummaries.size());
+            log.info("   ðŸ“Š Total stock summaries found: {}", allStockSummaries.size());
 
             List<StockSummaryWithBundlesDTO> result = allStockSummaries.stream()
                     .map(entity -> {
@@ -1662,15 +1581,15 @@ public class StockSummaryServiceImpl implements StockSummaryService {
                     })
                     .collect(Collectors.toList());
 
-            log.info("   ✅ Successfully mapped {} stock summaries with bundles", result.size());
-            log.info("\n══════════════════════════════════════════════════════════════════════════");
-            log.info("✅ [StockSummary] GET ALL WITH BUNDLES - COMPLETE");
-            log.info("══════════════════════════════════════════════════════════════════════════\n");
+            log.info("   âœ… Successfully mapped {} stock summaries with bundles", result.size());
+            log.info("\nâ•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•");
+            log.info("âœ… [StockSummary] GET ALL WITH BUNDLES - COMPLETE");
+            log.info("â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•\n");
 
             return result;
 
         } catch (Exception e) {
-            log.error("   ❌ Error fetching stock summaries with bundles: {}", e.getMessage(), e);
+            log.error("   âŒ Error fetching stock summaries with bundles: {}", e.getMessage(), e);
             throw new RuntimeException("Failed to fetch stock summaries with bundles: " + e.getMessage());
         }
     }
@@ -1678,9 +1597,9 @@ public class StockSummaryServiceImpl implements StockSummaryService {
     @Override
     public Map<String, Object> getMergedStockWithGrnDetails(String unit, String itemDescription, String itemGroup,
             String dimension) {
-        log.info("\n══════════════════════════════════════════════════════════════════════════");
-        log.info("📦 [StockSummary] GET MERGED STOCK WITH GRN DETAILS");
-        log.info("══════════════════════════════════════════════════════════════════════════");
+        log.info("\nâ•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•");
+        log.info("ðŸ“¦ [StockSummary] GET MERGED STOCK WITH GRN DETAILS");
+        log.info("â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•");
         log.info("   Filter Criteria:");
         log.info("      - Unit: '{}'", unit);
         log.info("      - Item Description: '{}'", itemDescription);
@@ -1833,14 +1752,14 @@ public class StockSummaryServiceImpl implements StockSummaryService {
             response.put("allGrnNumbers", new ArrayList<>(allGrnNumbers));
             response.put("rackDetails", rackDetailsList);
 
-            log.info("══════════════════════════════════════════════════════════════════════════");
-            log.info("✅ [StockSummary] GET MERGED STOCK WITH GRN DETAILS - COMPLETE");
-            log.info("══════════════════════════════════════════════════════════════════════════\n");
+            log.info("â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•");
+            log.info("âœ… [StockSummary] GET MERGED STOCK WITH GRN DETAILS - COMPLETE");
+            log.info("â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•\n");
 
             return response;
 
         } catch (Exception e) {
-            log.error("   ❌ Error in getMergedStockWithGrnDetails: {}", e.getMessage(), e);
+            log.error("   âŒ Error in getMergedStockWithGrnDetails: {}", e.getMessage(), e);
             response.put("success", false);
             response.put("error", "Failed to fetch merged stock with GRN details: " + e.getMessage());
             return response;
@@ -1873,7 +1792,7 @@ public class StockSummaryServiceImpl implements StockSummaryService {
                 }
             }
         } catch (Exception e) {
-            log.warn("      ⚠️ Error parsing GRN numbers: {}", e.getMessage());
+            log.warn("      âš ï¸ Error parsing GRN numbers: {}", e.getMessage());
             // Try simple split as fallback
             String[] parts = grnNumbersStr.split(",");
             for (String part : parts) {
@@ -1888,9 +1807,9 @@ public class StockSummaryServiceImpl implements StockSummaryService {
 
     @Override
     public List<Map<String, Object>> getAllMergedWithGrnDetails() {
-        log.info("\n══════════════════════════════════════════════════════════════════════════");
-        log.info("📦 [StockSummary] GET ALL MERGED WITH GRN DETAILS");
-        log.info("══════════════════════════════════════════════════════════════════════════");
+        log.info("\nâ•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•");
+        log.info("ðŸ“¦ [StockSummary] GET ALL MERGED WITH GRN DETAILS");
+        log.info("â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•");
 
         List<Map<String, Object>> resultList = new ArrayList<>();
 
@@ -1955,7 +1874,7 @@ public class StockSummaryServiceImpl implements StockSummaryService {
                     BigDecimal rackQuantityKg = BigDecimal.ZERO;
                     int rackQuantityNo = 0;
 
-                    // ✅ Rack price calculation (sum of itemValue and sum of kg for weighted
+                    // âœ… Rack price calculation (sum of itemValue and sum of kg for weighted
                     // average)
                     BigDecimal rackItemValueTotal = BigDecimal.ZERO;
                     BigDecimal rackItemKgTotal = BigDecimal.ZERO;
@@ -1976,7 +1895,7 @@ public class StockSummaryServiceImpl implements StockSummaryService {
                                 grnNumbersSet.add(bundle.getGrnNumber());
                             }
 
-                            // ✅ NULL → ZERO handling
+                            // âœ… NULL â†’ ZERO handling
                             BigDecimal price = bundle.getItemPrice() != null
                                     ? bundle.getItemPrice()
                                     : BigDecimal.ZERO;
@@ -1985,7 +1904,7 @@ public class StockSummaryServiceImpl implements StockSummaryService {
                                     ? bundle.getWeightmentQuantityKg()
                                     : BigDecimal.ZERO;
 
-                            // ✅ itemValue = itemPrice * weightmentQuantityKg
+                            // âœ… itemValue = itemPrice * weightmentQuantityKg
                             BigDecimal itemValue = price.multiply(bundleKg);
 
                             rackItemValueTotal = rackItemValueTotal.add(itemValue);
@@ -2024,6 +1943,8 @@ public class StockSummaryServiceImpl implements StockSummaryService {
                             bundleDetail.put("status", bundle.getStatus());
                             bundleDetail.put("createdBy", bundle.getCreatedBy());
                             bundleDetail.put("createdDate", bundle.getCreatedDate());
+                            // Include parent stock entity's unit for QR popup display
+                            bundleDetail.put("unit", stock.getUnit());
 
                             bundleDetailsList.add(bundleDetail);
                         }
@@ -2032,7 +1953,7 @@ public class StockSummaryServiceImpl implements StockSummaryService {
                         rackQuantityNo = stock.getQuantityNo() != null ? stock.getQuantityNo() : 0;
                     }
 
-                    // ✅ Rack average = sum of itemValue / sum of weightmentQuantityKg
+                    // âœ… Rack average = sum of itemValue / sum of weightmentQuantityKg
                     BigDecimal rackAverageItemPrice = rackItemKgTotal.compareTo(BigDecimal.ZERO) > 0
                             ? rackItemValueTotal.divide(rackItemKgTotal, 2, RoundingMode.HALF_UP)
                             : BigDecimal.ZERO;
@@ -2085,7 +2006,24 @@ public class StockSummaryServiceImpl implements StockSummaryService {
                     rackWiseList.add(rackEntry);
                 }
 
-                // ✅ MAIN LEVEL CALCULATION
+                // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+                // FIX #4: Filter out zero-quantity rack rows
+                // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+                rackWiseList = rackWiseList.stream()
+                    .filter(rack -> {
+                        BigDecimal qtyKg = (BigDecimal) rack.get("quantityKg");
+                        Object qtyNoObj = rack.get("quantityNo");
+                        int qtyNo = (qtyNoObj instanceof Integer) ? (Integer) qtyNoObj : 0;
+                        boolean hasKg = qtyKg != null && qtyKg.compareTo(BigDecimal.ZERO) > 0;
+                        boolean hasNo = qtyNo > 0;
+                        return hasKg || hasNo;
+                    })
+                    .collect(Collectors.toList());
+
+                // Skip entire group if all racks are zero-quantity
+                if (rackWiseList.isEmpty()) continue;
+
+                // âœ… MAIN LEVEL CALCULATION
                 BigDecimal totalWeightedPrice = BigDecimal.ZERO;
                 BigDecimal totalRackKg = BigDecimal.ZERO;
 
@@ -2097,7 +2035,7 @@ public class StockSummaryServiceImpl implements StockSummaryService {
                     BigDecimal rackAvg = (BigDecimal) rack.get("averageItemPrice");
                     BigDecimal rackQtyKg = (BigDecimal) rack.get("quantityKg");
 
-                    // ✅ Weighted price: averageItemPrice * quantityKg for each rack
+                    // âœ… Weighted price: averageItemPrice * quantityKg for each rack
                     if (rackAvg != null && rackQtyKg != null && rackAvg.compareTo(BigDecimal.ZERO) > 0
                             && rackQtyKg.compareTo(BigDecimal.ZERO) > 0) {
                         totalWeightedPrice = totalWeightedPrice.add(rackAvg.multiply(rackQtyKg));
@@ -2115,7 +2053,7 @@ public class StockSummaryServiceImpl implements StockSummaryService {
                     }
                 }
 
-                // ✅ Main averageItemPrice = sum(averageItemPrice * quantityKg) /
+                // âœ… Main averageItemPrice = sum(averageItemPrice * quantityKg) /
                 // sum(quantityKg)
                 BigDecimal finalAverageItemPrice = totalRackKg.compareTo(BigDecimal.ZERO) > 0
                         ? totalWeightedPrice.divide(totalRackKg, 2, RoundingMode.HALF_UP)
@@ -2159,18 +2097,18 @@ public class StockSummaryServiceImpl implements StockSummaryService {
                         materialType = "";
                     }
                 }
-                mergedEntry.put("materialType", materialType);
-                mergedEntry.put("itemGroup", sample.getItemGroup());
+                mergedEntry.put("materialType", formatMaterialType(materialType));
+                mergedEntry.put("itemGroup", normalizeItemGroup(sample.getItemGroup()));
                 mergedEntry.put("rackWise", rackWiseList);
 
-                // ═══════════════════════════════════════════════════════════════
+                // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
                 // BLOCKED QTY + SO ALLOTTED QTY + NET AVAILABLE QTY
-                // ═══════════════════════════════════════════════════════════════
+                // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
                 String itemDesc = sample.getItemDescription();
                 BigDecimal blockedQuantityKg = BigDecimal.ZERO;
                 BigDecimal soAllottedQuantityKg = BigDecimal.ZERO;
 
-                // 1) Blocked Quantity — from blocked_product joined via blocked_quantity
+                // 1) Blocked Quantity â€” from blocked_product joined via blocked_quantity
                 //    Only include records whose parent Quotation is NOT cancelled/expired/rejected
                 try {
                     List<BlockedQuantityEntity> blockedEntities =
@@ -2202,10 +2140,10 @@ public class StockSummaryServiceImpl implements StockSummaryService {
                         }
                     }
                 } catch (Exception ex) {
-                    log.warn("   ⚠️ Error computing blocked qty for '{}': {}", itemDesc, ex.getMessage());
+                    log.warn("   âš ï¸ Error computing blocked qty for '{}': {}", itemDesc, ex.getMessage());
                 }
 
-                // 2) SO Allotted Quantity — from SalesOrderLineItem where parent SO is ACTIVE
+                // 2) SO Allotted Quantity â€” from SalesOrderLineItem where parent SO is ACTIVE
                 try {
                     List<SalesOrder> activeSOs = salesOrderRepository.findAll().stream()
                             .filter(so -> {
@@ -2225,7 +2163,7 @@ public class StockSummaryServiceImpl implements StockSummaryService {
                         }
                     }
                 } catch (Exception ex) {
-                    log.warn("   ⚠️ Error computing SO allotted qty for '{}': {}", itemDesc, ex.getMessage());
+                    log.warn("   âš ï¸ Error computing SO allotted qty for '{}': {}", itemDesc, ex.getMessage());
                 }
 
                 // 3) Net Available = Total - Blocked - SO Allotted
@@ -2241,31 +2179,31 @@ public class StockSummaryServiceImpl implements StockSummaryService {
             }
 
             log.info("   Total merged entries: {}", resultList.size());
-            log.info("══════════════════════════════════════════════════════════════════════════");
-            log.info("✅ [StockSummary] GET ALL MERGED WITH GRN DETAILS - COMPLETE");
-            log.info("══════════════════════════════════════════════════════════════════════════\n");
+            log.info("â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•");
+            log.info("âœ… [StockSummary] GET ALL MERGED WITH GRN DETAILS - COMPLETE");
+            log.info("â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•\n");
 
             return resultList;
 
         } catch (Exception e) {
-            log.error("   ❌ Error in getAllMergedWithGrnDetails: {}", e.getMessage(), e);
+            log.error("   âŒ Error in getAllMergedWithGrnDetails: {}", e.getMessage(), e);
             throw new RuntimeException("Failed to fetch all merged stock with GRN details: " + e.getMessage());
         }
     }
 
-    // ═══════════════════════════════════════════════════════════════════════════════
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
     // BLOCKED DETAILS DRILL-DOWN
-    // ═══════════════════════════════════════════════════════════════════════════════
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
     @Override
     public List<Map<String, Object>> getBlockedDetails(String itemDescription) {
-        log.info("📦 [StockSummary] GET BLOCKED DETAILS for: {}", itemDescription);
+        log.info("ðŸ“¦ [StockSummary] GET BLOCKED DETAILS for: {}", itemDescription);
         List<Map<String, Object>> result = new ArrayList<>();
         try {
             List<BlockedQuantityEntity> blockedEntities =
                     blockedQuantityRepository.findByItemDescription(itemDescription);
 
             for (BlockedQuantityEntity bq : blockedEntities) {
-                // Check parent quotation status — skip cancelled/expired/rejected
+                // Check parent quotation status â€” skip cancelled/expired/rejected
                 String quotationNo = bq.getQuotationNo();
                 String quotationStatus = "UNKNOWN";
                 if (quotationNo != null) {
@@ -2303,19 +2241,19 @@ public class StockSummaryServiceImpl implements StockSummaryService {
                     result.add(detail);
                 }
             }
-            log.info("   ✅ Found {} blocked detail entries", result.size());
+            log.info("   âœ… Found {} blocked detail entries", result.size());
         } catch (Exception e) {
-            log.error("   ❌ Error fetching blocked details: {}", e.getMessage(), e);
+            log.error("   âŒ Error fetching blocked details: {}", e.getMessage(), e);
         }
         return result;
     }
 
-    // ═══════════════════════════════════════════════════════════════════════════════
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
     // SO ALLOTTED DETAILS DRILL-DOWN
-    // ═══════════════════════════════════════════════════════════════════════════════
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
     @Override
     public List<Map<String, Object>> getSoAllottedDetails(String itemDescription) {
-        log.info("📦 [StockSummary] GET SO ALLOTTED DETAILS for: {}", itemDescription);
+        log.info("ðŸ“¦ [StockSummary] GET SO ALLOTTED DETAILS for: {}", itemDescription);
         List<Map<String, Object>> result = new ArrayList<>();
         try {
             List<SalesOrder> allSOs = salesOrderRepository.findAll().stream()
@@ -2345,9 +2283,9 @@ public class StockSummaryServiceImpl implements StockSummaryService {
                     }
                 }
             }
-            log.info("   ✅ Found {} SO allotted detail entries", result.size());
+            log.info("   âœ… Found {} SO allotted detail entries", result.size());
         } catch (Exception e) {
-            log.error("   ❌ Error fetching SO allotted details: {}", e.getMessage(), e);
+            log.error("   âŒ Error fetching SO allotted details: {}", e.getMessage(), e);
         }
         return result;
     }

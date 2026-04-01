@@ -316,4 +316,46 @@ public class StockSummaryController {
                     .body(Map.of("error", "Failed to fetch SO allotted details: " + e.getMessage()));
         }
     }
+
+    /**
+     * Check FG (Finished Goods) stock availability for packing QR validation (Gate 6)
+     * Returns whether available FG stock exists for the given item in the given unit
+     *
+     * Usage: GET /api/metalco/stock-summary/fg-availability?unit=X&itemDescription=Y
+     */
+    @GetMapping("/fg-availability")
+    public ResponseEntity<?> checkFGStockAvailability(
+            @RequestParam String unit,
+            @RequestParam String itemDescription) {
+        try {
+            List<StockSummaryEntity> fgStock = service.getAll().stream()
+                    .filter(s -> "FG".equalsIgnoreCase(s.getItemGroup()))
+                    .filter(s -> unit.equalsIgnoreCase(s.getUnit()))
+                    .filter(s -> itemDescription.equalsIgnoreCase(s.getItemDescription()))
+                    .filter(s -> s.getQuantityKg() != null && s.getQuantityKg().compareTo(java.math.BigDecimal.ZERO) > 0)
+                    .toList();
+
+            boolean available = !fgStock.isEmpty();
+            java.math.BigDecimal totalKg = fgStock.stream()
+                    .map(StockSummaryEntity::getQuantityKg)
+                    .reduce(java.math.BigDecimal.ZERO, java.math.BigDecimal::add);
+            int totalNo = fgStock.stream()
+                    .filter(s -> s.getQuantityNo() != null)
+                    .mapToInt(StockSummaryEntity::getQuantityNo)
+                    .sum();
+
+            return ResponseEntity.ok(Map.of(
+                    "available", available,
+                    "quantityKg", totalKg,
+                    "quantityNo", totalNo,
+                    "stockCount", fgStock.size()
+            ));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of(
+                            "available", false,
+                            "error", "Failed to check FG stock availability: " + e.getMessage()
+                    ));
+        }
+    }
 }

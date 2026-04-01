@@ -29,6 +29,7 @@ public class ProductionEntryEndPieceEntity {
     private String qrCode;
 
     // New fields
+    private String parentDimension;
     private String batchNumber;
     private BigDecimal width;
     private BigDecimal thickness;

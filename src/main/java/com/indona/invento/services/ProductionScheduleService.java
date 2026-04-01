@@ -17,6 +17,10 @@ public interface ProductionScheduleService {
 
     List<ProductionScheduleEntity> getAllProductionSchedule();
 
+    List<ProductionScheduleEntity> getAllProductionScheduleByCategory(String productCategory);
+
+    List<String> getDistinctProductCategories();
+
     ProductionScheduleEntity updateProductionSchedule(Long id, ProductionScheduleDto dto);
 
     Map<String, Object> getMachineDetails(String machineName);

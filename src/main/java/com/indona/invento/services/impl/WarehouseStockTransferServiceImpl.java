@@ -67,7 +67,7 @@ public class WarehouseStockTransferServiceImpl implements WarehouseStockTransfer
     @Override
     public List<StockSummaryEntity> processReturn(WarehouseStockReturnRequestDTO request) {
         System.out.println("\n========== /warehouse-stock-transfer/return API CALLED ==========");
-        System.out.println("📦 Processing warehouse stock return");
+        System.out.println("📦 Processing warehouse stock return (UPSERT)");
         System.out.println("   SO Number: " + request.getSoNumber());
         System.out.println("   Line Number: " + request.getLineNumber());
         System.out.println("   Return Entries: " + request.getReturnEntries().size());
@@ -76,22 +76,53 @@ public class WarehouseStockTransferServiceImpl implements WarehouseStockTransfer
         List<StockSummaryEntity> savedList = new ArrayList<>();
 
         for (WarehouseStockReturnEntryDTO entry : request.getReturnEntries()) {
-            StockSummaryEntity returnedStock = StockSummaryEntity.builder()
-                    .unit(entry.getUnit())
-                    .store("warehouse")
-                    .storageArea("loose")
-                    .rackColumnShelfNumber("common")
-                    .itemDescription(entry.getItemDescription())
-                    .brand(entry.getBrand())
-                    .grade(entry.getGrade())
-                    .temper(entry.getTemper())
-                    .quantityKg(entry.getWeighmentQuantityKg())
-                    .quantityNo(1)
-                    .materialType("")
-                    .pickListLocked(false)
-                    .build();
+            String unit = entry.getUnit();
+            String itemDesc = entry.getItemDescription();
+            String store = "warehouse";
+            String storageArea = "loose";
+            String rack = "common";
 
-            StockSummaryEntity saved = stockSummaryRepository.save(returnedStock);
+            // 🔍 FIX #3: UPSERT — Check if matching stock entry already exists
+            java.util.Optional<StockSummaryEntity> existingOpt = stockSummaryRepository
+                    .findExactMatchWithoutItemGroup(unit, itemDesc, store, storageArea, rack);
+
+            StockSummaryEntity stockEntry;
+            if (existingOpt.isPresent()) {
+                // ♻️ UPDATE existing entry — add quantity
+                stockEntry = existingOpt.get();
+                java.math.BigDecimal oldKg = stockEntry.getQuantityKg() != null
+                        ? stockEntry.getQuantityKg() : java.math.BigDecimal.ZERO;
+                int oldNo = stockEntry.getQuantityNo() != null ? stockEntry.getQuantityNo() : 0;
+
+                java.math.BigDecimal addKg = entry.getWeighmentQuantityKg() != null
+                        ? entry.getWeighmentQuantityKg() : java.math.BigDecimal.ZERO;
+
+                stockEntry.setQuantityKg(oldKg.add(addKg));
+                stockEntry.setQuantityNo(oldNo + 1);
+
+                System.out.println("   ♻️ UPSERT UPDATE: " + itemDesc + " → existing ID " + stockEntry.getId());
+                System.out.println("      Old Qty: " + oldKg + " KG → New Qty: " + stockEntry.getQuantityKg() + " KG");
+            } else {
+                // ✨ CREATE new entry
+                stockEntry = StockSummaryEntity.builder()
+                        .unit(unit)
+                        .store(store)
+                        .storageArea(storageArea)
+                        .rackColumnShelfNumber(rack)
+                        .itemDescription(itemDesc)
+                        .brand(entry.getBrand())
+                        .grade(entry.getGrade())
+                        .temper(entry.getTemper())
+                        .quantityKg(entry.getWeighmentQuantityKg())
+                        .quantityNo(1)
+                        .materialType("")
+                        .pickListLocked(false)
+                        .build();
+
+                System.out.println("   ✨ UPSERT CREATE: " + itemDesc + " → new entry");
+            }
+
+            StockSummaryEntity saved = stockSummaryRepository.save(stockEntry);
             savedList.add(saved);
         }
 

@@ -2,11 +2,12 @@ package com.indona.invento.services.impl;
 
 import com.indona.invento.dao.PackingSchedulerRepository;
 import com.indona.invento.dao.SalesOrderRepository;
+import com.indona.invento.dao.SalesOrderSchedulerRepository;
 import com.indona.invento.dto.PackingInstructionDTO;
 import com.indona.invento.dto.PackingScheduleDetailsDTO;
 import com.indona.invento.entities.PackingEntityScheduler;
-
 import com.indona.invento.entities.PackingInstruction;
+import com.indona.invento.entities.SalesOrderSchedulerEntity;
 import com.indona.invento.entities.SalesOrder;
 import com.indona.invento.services.PackingSchedulerService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -22,6 +23,9 @@ public class PackingSchedulerServiceImpl implements PackingSchedulerService {
 
     @Autowired
     private SalesOrderRepository salesOrderRepository;
+
+    @Autowired
+    private SalesOrderSchedulerRepository salesOrderSchedulerRepository;
 
     @Override
     public List<PackingEntityScheduler> getAllPackingSchedules() {
@@ -71,6 +75,13 @@ public class PackingSchedulerServiceImpl implements PackingSchedulerService {
         System.out.println("   Dimension: " + packing.getDimension());
         System.out.println("══════════════════════════════════════════════════════════════════\n");
 
+        // Look up packing flag from SO Schedule
+        Boolean packingFlag = null;
+        SalesOrderSchedulerEntity soSchedule = salesOrderSchedulerRepository.findBySoNumberAndLineNumber(soNumber, lineNumber);
+        if (soSchedule != null) {
+            packingFlag = soSchedule.getPacking();
+        }
+
         return PackingScheduleDetailsDTO.builder()
                 .customerCode(packing.getCustomerCode())
                 .customerName(packing.getCustomerName())
@@ -81,6 +92,7 @@ public class PackingSchedulerServiceImpl implements PackingSchedulerService {
                 .temper(packing.getTemper())
                 .dimension(packing.getDimension())
                 .itemDescription(packing.getItemDescription())
+                .packing(packingFlag)
                 .build();
     }
 

@@ -55,4 +55,10 @@ public class BillingSummaryDTO {
     private String billingStatus;
     private Integer creditPeriodDays;
     private String coc;
+
+    // FRD v3.0 new fields
+    private String rfdListNumber;
+    private String eWaybillNumber;
+    private String lrNumber;
+    private BigDecimal hamaliCharges;
 }

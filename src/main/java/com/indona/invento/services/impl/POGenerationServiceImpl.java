@@ -39,6 +39,22 @@ public class POGenerationServiceImpl implements POGenerationService {
     @Transactional
     @Override
     public POGenerationEntity savePOGeneration(POGenerationDTO dto) {
+        // ✅ Step 0: Duplicate prevention — check if any PR numbers already have a PO generated
+        if (dto.getItems() != null) {
+            for (var item : dto.getItems()) {
+                if (item.getPrNumber() != null && !item.getPrNumber().isBlank()) {
+                    List<PORequestEntity> existingPRs = poRequestRepository.findByPrNumberIn(
+                            List.of(item.getPrNumber()));
+                    for (PORequestEntity pr : existingPRs) {
+                        if ("PO GENERATED".equals(pr.getStatus())) {
+                            throw new RuntimeException(
+                                    "PR " + item.getPrNumber() + " already has a PO generated. Cannot create duplicate.");
+                        }
+                    }
+                }
+            }
+        }
+
         // ✅ Step 1: Prepare PO entity
         POGenerationEntity po = POGenerationEntity.builder()
                 .supplierCode(dto.getSupplierCode())

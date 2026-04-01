@@ -73,54 +73,64 @@ public class BillStockReturnServiceImpl implements BillStockReturnService {
 
         BillStockReturnEntity savedReturn = repository.save(entity);
 
-        // Step 4: Create NEW stock entry in StockSummary
+        // Step 4: FIX #3 — UPSERT: Check if matching stock entry already exists at this location
         Integer returnQtyNo = 0;
         if (dto.getReturnQuantityNo() != null) {
             returnQtyNo = dto.getReturnQuantityNo().intValue();
         }
 
-        StockSummaryEntity newStockEntry = StockSummaryEntity.builder()
-                .unit(dto.getUnit())
-                .store(store)
-                .storageArea(storageArea)
-                .rackColumnShelfNumber(rackColumnBinNumber)
-                .productCategory(dto.getProductCategory())
-                .itemDescription(dto.getItemDescription())
-                .brand(dto.getBrand())
-                .grade(dto.getGrade())
-                .temper(dto.getTemper())
-                .dimension(dto.getDimension())
-                .quantityKg(dto.getReturnQuantityKg() != null ? dto.getReturnQuantityKg() : BigDecimal.ZERO)
-                .quantityNo(returnQtyNo)
-                .itemPrice(dto.getItemPrice())
-                .materialType(null) // Not provided in return
-                .reprintQr(false)
-                .sectionNo(null)
-                .pickListLocked(false)
-                .build();
-
-        stockSummaryRepository.save(newStockEntry);
-
-        // Step 5: Update total quantity in ALL existing stock entries (match by unit + itemDescription)
-        List<StockSummaryEntity> existingStocks = stockSummaryRepository
-                .findByUnitAndItemDescription(dto.getUnit(), dto.getItemDescription());
-
-        if (!existingStocks.isEmpty()) {
-            BigDecimal returnKg = dto.getReturnQuantityKg() != null ? dto.getReturnQuantityKg() : BigDecimal.ZERO;
-
-            // Update ALL matching stock entries
-            for (StockSummaryEntity existingStock : existingStocks) {
-                // Add returned quantities to existing totals
-                BigDecimal currentKg = existingStock.getQuantityKg() != null ? existingStock.getQuantityKg() : BigDecimal.ZERO;
-                Integer currentNo = existingStock.getQuantityNo() != null ? existingStock.getQuantityNo() : 0;
-
-                existingStock.setQuantityKg(currentKg.add(returnKg));
-                existingStock.setQuantityNo(currentNo + returnQtyNo);
-
-                stockSummaryRepository.save(existingStock);
+        // FIX #5: Resolve materialType from ItemMaster
+        String resolvedMaterialType = null;
+        if (dto.getItemDescription() != null && !dto.getItemDescription().isBlank()) {
+            java.util.List<StockSummaryEntity> existingByItem = stockSummaryRepository
+                    .findByUnitAndItemDescription(dto.getUnit(), dto.getItemDescription());
+            if (!existingByItem.isEmpty() && existingByItem.get(0).getMaterialType() != null) {
+                resolvedMaterialType = existingByItem.get(0).getMaterialType();
             }
         }
-        // If no existing stock found, the new entry created above serves as the total
+
+        // UPSERT: Check for existing stock at same unit + itemDesc + store + storageArea + rack
+        java.util.Optional<StockSummaryEntity> existingOpt = stockSummaryRepository
+                .findExactMatchWithoutItemGroup(dto.getUnit(), dto.getItemDescription(),
+                        store, storageArea, rackColumnBinNumber);
+
+        if (existingOpt.isPresent()) {
+            // ♻️ UPDATE existing entry — add returned quantity
+            StockSummaryEntity existingStock = existingOpt.get();
+            BigDecimal currentKg = existingStock.getQuantityKg() != null ? existingStock.getQuantityKg() : BigDecimal.ZERO;
+            Integer currentNo = existingStock.getQuantityNo() != null ? existingStock.getQuantityNo() : 0;
+            BigDecimal returnKg = dto.getReturnQuantityKg() != null ? dto.getReturnQuantityKg() : BigDecimal.ZERO;
+
+            existingStock.setQuantityKg(currentKg.add(returnKg));
+            existingStock.setQuantityNo(currentNo + returnQtyNo);
+
+            stockSummaryRepository.save(existingStock);
+            System.out.println("   ♻️ UPSERT UPDATE: Bill stock return → existing ID " + existingStock.getId());
+        } else {
+            // ✨ CREATE new entry
+            StockSummaryEntity newStockEntry = StockSummaryEntity.builder()
+                    .unit(dto.getUnit())
+                    .store(store)
+                    .storageArea(storageArea)
+                    .rackColumnShelfNumber(rackColumnBinNumber)
+                    .productCategory(dto.getProductCategory())
+                    .itemDescription(dto.getItemDescription())
+                    .brand(dto.getBrand())
+                    .grade(dto.getGrade())
+                    .temper(dto.getTemper())
+                    .dimension(dto.getDimension())
+                    .quantityKg(dto.getReturnQuantityKg() != null ? dto.getReturnQuantityKg() : BigDecimal.ZERO)
+                    .quantityNo(returnQtyNo)
+                    .itemPrice(dto.getItemPrice())
+                    .materialType(resolvedMaterialType)
+                    .reprintQr(false)
+                    .sectionNo(null)
+                    .pickListLocked(false)
+                    .build();
+
+            stockSummaryRepository.save(newStockEntry);
+            System.out.println("   ✨ UPSERT CREATE: Bill stock return → new entry");
+        }
 
         return savedReturn;
     }

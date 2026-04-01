@@ -455,29 +455,10 @@ public class ItemEnquiryServiceImpl implements ItemEnquiryService {
             return null;
         }
 
-        // ✅ Cap the available quantity to stock
-        BigDecimal finalKg = totalKg;
-        int finalNo = totalNo;
+        // ✅ Show full available stock (no capping) — matches Stock Summary Inventory Wise
+        log.info("📦 Total available stock: totalKg={}, totalNo={}", totalKg, totalNo);
 
-        if ("Kgs".equalsIgnoreCase(uom) || "Kg".equalsIgnoreCase(uom)) {
-            if (requiredQuantity.compareTo(totalKg) < 0) {
-                finalKg = requiredQuantity; // enough stock, show required
-                log.info("📦 UOM=Kgs: Enough stock, capping to required: {}", finalKg);
-            } else {
-                finalKg = totalKg; // not enough, show available
-                log.info("📦 UOM=Kgs: Not enough stock, showing available: {}", finalKg);
-            }
-        } else if ("No".equalsIgnoreCase(uom)) {
-            if (requiredQuantity.compareTo(BigDecimal.valueOf(totalNo)) < 0) {
-                finalNo = requiredQuantity.intValue(); // enough stock, show required
-                log.info("📦 UOM=No: Enough stock, capping to required: {}", finalNo);
-            } else {
-                finalNo = totalNo; // not enough, show available
-                log.info("📦 UOM=No: Not enough stock, showing available: {}", finalNo);
-            }
-        }
-
-        // ✅ Build DTO with capped quantities
+        // ✅ Build DTO with actual stock quantities
         AvailableStockDto dto = AvailableStockDto.builder()
                 .id(sample.getId())
                 .unit(sample.getUnit())
@@ -486,8 +467,8 @@ public class ItemEnquiryServiceImpl implements ItemEnquiryService {
                 .grade(sample.getGrade())
                 .temper(sample.getTemper())
                 .dimension(sample.getDimension())
-                .quantityKg(finalKg)
-                .quantityNo(finalNo)
+                .quantityKg(totalKg)
+                .quantityNo(totalNo)
                 .itemPrice(sample.getItemPrice())
                 .inventoryType("N/A")
                 .build();

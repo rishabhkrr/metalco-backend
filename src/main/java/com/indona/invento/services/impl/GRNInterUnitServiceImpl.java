@@ -38,6 +38,9 @@ public class GRNInterUnitServiceImpl implements GRNInterUnitService {
     private GrnLineItemRepository grnLineItemRepository;
 
     @Autowired
+    private GateInwardRepository gateInwardRepository;
+
+    @Autowired
     private AuditLogService auditLogService;
 
     @Autowired
@@ -119,6 +122,13 @@ public class GRNInterUnitServiceImpl implements GRNInterUnitService {
                     existing.getGrnInterUnitRefNumber());
         }
 
+        // FRD: GIS-005 — If status is "Rejected", reset to "Pending" on resubmit
+        String oldStatus = existing.getStatus();
+        if ("Rejected".equalsIgnoreCase(existing.getStatus())) {
+            existing.setStatus("Pending");
+            existing.setRejectionRemarks(null);
+        }
+
         // Update allowed fields
         existing.setMedcNumber(entity.getMedcNumber());
         existing.setMrNumber(entity.getMrNumber());
@@ -139,10 +149,19 @@ public class GRNInterUnitServiceImpl implements GRNInterUnitService {
 
         GRNInterUnitEntity saved = grnInterUnitRepository.save(existing);
 
+        String logMessage = "IU GRN " + saved.getGrnInterUnitRefNumber() + " updated";
+        if ("Rejected".equalsIgnoreCase(oldStatus)) {
+            logMessage += " (resubmitted after rejection, status reset to Pending)";
+            // FRD: GIS-005 — Notify approver for re-review
+            notificationService.createRoleNotification(
+                    "INFO", "IU GRN Resubmitted",
+                    "IU GRN " + saved.getGrnInterUnitRefNumber() + " has been edited and resubmitted for approval.",
+                    "STORES_MANAGER", "GRN_INTERUNIT", "GRNInterUnitEntity", saved.getId(), saved.getUnit());
+        }
+
         auditLogService.logAction("UPDATE", "GRN_INTERUNIT", "GRNInterUnitEntity",
-                saved.getId(), saved.getGrnInterUnitRefNumber(), null, null,
-                "IU GRN " + saved.getGrnInterUnitRefNumber() + " updated",
-                "STORES_EXECUTIVE", saved.getUnit());
+                saved.getId(), saved.getGrnInterUnitRefNumber(), oldStatus, saved.getStatus(),
+                logMessage, "STORES_EXECUTIVE", saved.getUnit());
 
         return saved;
     }
@@ -538,5 +557,37 @@ public class GRNInterUnitServiceImpl implements GRNInterUnitService {
     @Override
     public boolean isMedciUsed(String medcNumber, String unit) {
         return grnInterUnitRepository.existsByMedcNumberAndUnit(medcNumber, unit);
+    }
+
+    /**
+     * FRD: IUMR-002 — Return available MEDCI numbers:
+     *   1. From Gate Entry Inward with Mode = "Interunit transfer" (case-insensitive)
+     *   2. Exclude MEDCI numbers already entered in GRN Interunit module for the current unit
+     */
+    @Override
+    public List<String> getAvailableMedciNumbers(String unit) {
+        // Step 1: Get all Gate Entry Inward records with mode = "inter unit transfer"
+        List<GateInwardEntity> gateEntries = gateInwardRepository.findAll();
+        Set<String> interunitMedci = gateEntries.stream()
+                .filter(ge -> ge.getMode() != null &&
+                        ge.getMode().toLowerCase().contains("inter unit transfer"))
+                .map(GateInwardEntity::getInvoiceNumber)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+
+        // Step 2: Get all MEDCI numbers already used in GRN Interunit for this unit
+        List<GRNInterUnitEntity> existingGrns = unit != null ?
+                grnInterUnitRepository.findByUnit(unit) :
+                grnInterUnitRepository.findAll();
+        Set<String> usedMedci = existingGrns.stream()
+                .map(GRNInterUnitEntity::getMedcNumber)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+
+        // Step 3: Return only available (not already used)
+        return interunitMedci.stream()
+                .filter(m -> !usedMedci.contains(m))
+                .sorted()
+                .collect(Collectors.toList());
     }
 }

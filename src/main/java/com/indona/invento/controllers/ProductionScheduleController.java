@@ -30,8 +30,21 @@ public class ProductionScheduleController {
         return new ResponseEntity<>(HttpStatus.NO_CONTENT);
     }
 
+    /**
+     * Get distinct product categories for filter dropdown
+     */
+    @GetMapping("/product-categories")
+    public ResponseEntity<List<String>> getDistinctProductCategories() {
+        List<String> categories = productScheduleService.getDistinctProductCategories();
+        return ResponseEntity.ok(categories);
+    }
+
     @GetMapping("/all")
-    public List<ProductionScheduleEntity> getAllProductionSchedule() {
+    public List<ProductionScheduleEntity> getAllProductionSchedule(
+            @RequestParam(required = false) String productCategory) {
+        if (productCategory != null && !productCategory.isBlank()) {
+            return productScheduleService.getAllProductionScheduleByCategory(productCategory.trim());
+        }
         return productScheduleService.getAllProductionSchedule();
     }
 

@@ -43,6 +43,8 @@ public class SalesOrderSchedulerServiceImpl implements SalesOrderSchedulerServic
 
     private final ProductionScheduleRepository productionScheduleRepository;
 
+    private final RackBinMasterRepository rackBinMasterRepository;
+
     @Override
     public void saveSchedule(List<SalesOrderSchedulerDTO> dtoList) {
         System.out.println("\n\n╔════════════════════════════════════════════════════════════════╗");
@@ -904,416 +906,21 @@ public class SalesOrderSchedulerServiceImpl implements SalesOrderSchedulerServic
         }
 
         // ═══════════════════════════════════════════════════════════════════════════════════════════
-        // SELECTION VARIABLES
+        // FRD 4A.2A — FIFO PICKLIST ALLOCATION ENGINE
         // ═══════════════════════════════════════════════════════════════════════════════════════════
-        List<java.util.Map<String, Object>> selectedBundles = new ArrayList<>();
-        String storageType = "";
-        String selectionReason = "";
-        BigDecimal totalSelectedQtyKg = BigDecimal.ZERO;
-        boolean selectionDone = false;
+        com.indona.invento.services.helpers.FifoResult fifoResult =
+                com.indona.invento.services.helpers.FifoPicklistEngine.allocate(
+                        requiredQtyKg, loosePieceBundles, warehouseBundles, commonBundles);
 
-        System.out.println("\n╔══════════════════════════════════════════════════════════════════════════════╗");
-        System.out.println("║            APPLYING SELECTION CRITERIA (FULL ORDER)                         ║");
-        System.out.println("╠══════════════════════════════════════════════════════════════════════════════╣");
-        System.out.println("║ Required Qty    : " + requiredQtyKg + " KG");
-        System.out.println("║ Tolerance       : ±5%");
-        System.out.println("║ Lower Tolerance : " + lowerTolerance + " KG");
-        System.out.println("║ Upper Tolerance : " + upperTolerance + " KG");
-        System.out.println("╚══════════════════════════════════════════════════════════════════════════════╝");
-
-        // ═══════════════════════════════════════════════════════════════════════════════════════════
-        // CRITERIA 1: Required Qty < Bundle Qty → LOOSE PIECE STORAGE
-        // (Stock with QR is >= Required, but Required < single bundle)
-        // ═══════════════════════════════════════════════════════════════════════════════════════════
-        System.out.println("\n┌─ CRITERIA 1: Required Qty < Bundle Qty? ────────────────────────────────────┐");
-        System.out.println("│ Condition: Stock with QR >= Required, but Required < single bundle qty      │");
-        System.out.println("│ Action   : Select from LOOSE PIECE STORAGE                                  │");
-        System.out.println("├──────────────────────────────────────────────────────────────────────────────┤");
-
-        if (!selectionDone && totalWithQR.compareTo(requiredQtyKg) >= 0) {
-            boolean criteria1Checked = false;
-            for (java.util.Map<String, Object> bundle : warehouseBundles) {
-                BigDecimal bundleQty = getBundleQtyKg.apply(bundle);
-                boolean isMatch = requiredQtyKg.compareTo(bundleQty) < 0 && requiredQtyKg.compareTo(bundleQty.multiply(new BigDecimal("0.95"))) < 0;
-
-                System.out.println("│ Bundle " + bundle.get("bundleId") + " | Qty: " + bundleQty + " KG | Required < Bundle? " + (isMatch ? "✅ YES" : "❌ NO"));
-
-                if (isMatch && !criteria1Checked) {
-                    criteria1Checked = true;
-                    System.out.println("│ ✅ CRITERIA 1 MATCHED!");
-                    System.out.println("│    Required: " + requiredQtyKg + " KG < Bundle: " + bundleQty + " KG");
-                    System.out.println("│    → Selecting from LOOSE PIECE STORAGE");
-
-                    if (!loosePieceBundles.isEmpty()) {
-                        for (java.util.Map<String, Object> looseBundle : loosePieceBundles) {
-                            BigDecimal looseQty = getBundleQtyKg.apply(looseBundle);
-                            selectedBundles.add(looseBundle);
-                            totalSelectedQtyKg = totalSelectedQtyKg.add(looseQty);
-                            System.out.println("│    ➕ Selected: Bundle " + looseBundle.get("bundleId") + " | " + looseQty + " KG | Running Total: " + totalSelectedQtyKg + " KG");
-
-                            if (totalSelectedQtyKg.compareTo(requiredQtyKg) >= 0) {
-                                break;
-                            }
-                        }
-
-                        if (totalSelectedQtyKg.compareTo(requiredQtyKg) >= 0) {
-                            storageType = "LOOSE_PIECE";
-                            selectionReason = "Required Qty (" + requiredQtyKg + " KG) < Bundle Qty (" + bundleQty + " KG) → Selected pieces from Loose Piece Storage (FIFO)";
-                            selectionDone = true;
-                        }
-                    } else {
-                        System.out.println("│    ⚠️ No Loose Piece bundles available - will check other criteria");
-                    }
-                    break;
-                }
-            }
-            if (!criteria1Checked) {
-                System.out.println("│ ❌ No bundle found where Required < Bundle Qty");
-            }
-        } else {
-            System.out.println("│ ⏭️ SKIPPED: Total with QR (" + totalWithQR + ") < Required (" + requiredQtyKg + ")");
-        }
-        System.out.println("│ Status: " + (selectionDone ? "✅ SELECTION DONE" : "➡️ Continue to next criteria"));
-        System.out.println("└──────────────────────────────────────────────────────────────────────────────┘");
-
-        // ═══════════════════════════════════════════════════════════════════════════════════════════
-        // CRITERIA 2: Required Qty ≈ Bundle Qty (±5% tolerance) → WAREHOUSE
-        // ═══════════════════════════════════════════════════════════════════════════════════════════
-        System.out.println("\n┌─ CRITERIA 2: Required Qty ≈ Single Bundle Qty (±5%)? ────────────────────────┐");
-        System.out.println("│ Condition: Single bundle qty within ±5% of required                          │");
-        System.out.println("│ Action   : Select that bundle from WAREHOUSE                                 │");
-        System.out.println("├──────────────────────────────────────────────────────────────────────────────┤");
-
-        if (!selectionDone && totalWithQR.compareTo(requiredQtyKg) >= 0) {
-            boolean found = false;
-            for (java.util.Map<String, Object> bundle : warehouseBundles) {
-                BigDecimal bundleQty = getBundleQtyKg.apply(bundle);
-                boolean inRange = bundleQty.compareTo(lowerTolerance) >= 0 && bundleQty.compareTo(upperTolerance) <= 0;
-
-                System.out.println("│ Bundle " + bundle.get("bundleId") + " | Qty: " + bundleQty + " KG | In Range [" + lowerTolerance + "-" + upperTolerance + "]? " + (inRange ? "✅ YES" : "❌ NO"));
-
-                if (inRange && !found) {
-                    found = true;
-                    System.out.println("│ ✅ CRITERIA 2 MATCHED!");
-                    System.out.println("│    Required: " + requiredQtyKg + " KG ≈ Bundle: " + bundleQty + " KG (within ±5%)");
-                    System.out.println("│    → Selecting this bundle from WAREHOUSE");
-                    System.out.println("│    ➕ Selected: Bundle " + bundle.get("bundleId") + " | " + bundleQty + " KG");
-
-                    selectedBundles.add(bundle);
-                    totalSelectedQtyKg = bundleQty;
-                    storageType = "WAREHOUSE";
-                    selectionReason = "Required Qty (" + requiredQtyKg + " KG) ≈ Bundle Qty (" + bundleQty + " KG) within ±5% → Selected from Warehouse (Earliest GRN first)";
-                    selectionDone = true;
-                    break;
-                }
-            }
-            if (!found) {
-                System.out.println("│ ❌ No single bundle found within ±5% tolerance");
-            }
-        } else if (!selectionDone) {
-            System.out.println("│ ⏭️ SKIPPED: Already selected or insufficient stock");
-        }
-        System.out.println("│ Status: " + (selectionDone ? "✅ SELECTION DONE" : "➡️ Continue to next criteria"));
-        System.out.println("└──────────────────────────────────────────────────────────────────────────────┘");
-
-        // ═══════════════════════════════════════════════════════════════════════════════════════════
-        // CRITERIA 3: Required Qty ≈ Sum of Multiple Bundles (±5% tolerance) → WAREHOUSE
-        // ═══════════════════════════════════════════════════════════════════════════════════════════
-        System.out.println("\n┌─ CRITERIA 3: Required Qty ≈ Sum of Multiple Bundles (±5%)? ─────────────────┐");
-        System.out.println("│ Condition: Sum of multiple bundles within ±5% of required                   │");
-        System.out.println("│ Action   : Select those bundles from WAREHOUSE                              │");
-        System.out.println("├──────────────────────────────────────────────────────────────────────────────┤");
-
-        if (!selectionDone && totalWithQR.compareTo(requiredQtyKg) >= 0) {
-            BigDecimal runningTotal = BigDecimal.ZERO;
-            List<java.util.Map<String, Object>> tempSelected = new ArrayList<>();
-
-            for (java.util.Map<String, Object> bundle : warehouseBundles) {
-                BigDecimal bundleQty = getBundleQtyKg.apply(bundle);
-                runningTotal = runningTotal.add(bundleQty);
-                tempSelected.add(bundle);
-
-                System.out.println("│ + Bundle " + bundle.get("bundleId") + " | " + bundleQty + " KG | Running Total: " + runningTotal + " KG");
-
-                // Check if sum is within tolerance
-                if (runningTotal.compareTo(lowerTolerance) >= 0 && runningTotal.compareTo(upperTolerance) <= 0) {
-                    System.out.println("│ ✅ CRITERIA 3 MATCHED!");
-                    System.out.println("│    Required: " + requiredQtyKg + " KG ≈ Sum: " + runningTotal + " KG (within ±5%)");
-                    System.out.println("│    → Selecting " + tempSelected.size() + " bundles from WAREHOUSE");
-
-                    selectedBundles.addAll(tempSelected);
-                    totalSelectedQtyKg = runningTotal;
-                    storageType = "WAREHOUSE";
-                    selectionReason = "Required Qty (" + requiredQtyKg + " KG) ≈ Sum of " + tempSelected.size() + " bundles (" + runningTotal + " KG) within ±5% → Selected from Warehouse (FIFO)";
-                    selectionDone = true;
-                    break;
-                }
-
-                // If exceeded upper tolerance, stop
-                if (runningTotal.compareTo(upperTolerance) > 0) {
-                    System.out.println("│ ⚠️ Sum (" + runningTotal + ") exceeded upper tolerance (" + upperTolerance + ") - stopping");
-                    break;
-                }
-            }
-            if (!selectionDone) {
-                System.out.println("│ ❌ Could not find combination within ±5% tolerance");
-            }
-        } else if (!selectionDone) {
-            System.out.println("│ ⏭️ SKIPPED: Already selected or insufficient stock");
-        }
-        System.out.println("│ Status: " + (selectionDone ? "✅ SELECTION DONE" : "➡️ Continue to next criteria"));
-        System.out.println("└──────────────────────────────────────────────────────────────────────────────┘");
-
-        // ═══════════════════════════════════════════════════════════════════════════════════════════
-        // CRITERIA 4: Sum outside tolerance but Loose Piece available → WAREHOUSE + LOOSE PIECE
-        // (Select one bundle less than required, remaining from loose piece)
-        // ═══════════════════════════════════════════════════════════════════════════════════════════
-        System.out.println("\n┌─ CRITERIA 4: Warehouse + Loose Piece Combination? ───────────────────────────┐");
-        System.out.println("│ Condition: Sum outside tolerance, Loose Piece available                      │");
-        System.out.println("│ Action   : Select bundles under required + remaining from Loose Piece        │");
-        System.out.println("├──────────────────────────────────────────────────────────────────────────────┤");
-
-        if (!selectionDone && totalWithQR.compareTo(requiredQtyKg) >= 0 && !loosePieceBundles.isEmpty()) {
-            System.out.println("│ Loose Piece bundles available: " + loosePieceBundles.size());
-
-            // Find bundles that are just under the required quantity
-            BigDecimal runningTotal = BigDecimal.ZERO;
-            List<java.util.Map<String, Object>> tempSelected = new ArrayList<>();
-
-            for (java.util.Map<String, Object> bundle : warehouseBundles) {
-                BigDecimal bundleQty = getBundleQtyKg.apply(bundle);
-                BigDecimal potentialTotal = runningTotal.add(bundleQty);
-
-                // Stop when adding this bundle would exceed required qty
-                if (potentialTotal.compareTo(requiredQtyKg) >= 0) {
-                    System.out.println("│ ⏹️ Stop: Adding Bundle " + bundle.get("bundleId") + " (" + bundleQty + " KG) would exceed required");
-                    break;
-                }
-
-                runningTotal = potentialTotal;
-                tempSelected.add(bundle);
-                System.out.println("│ + Bundle " + bundle.get("bundleId") + " | " + bundleQty + " KG | Running Total: " + runningTotal + " KG");
-            }
-
-            if (!tempSelected.isEmpty()) {
-                BigDecimal remainingQty = requiredQtyKg.subtract(runningTotal);
-                System.out.println("│ Warehouse bundles selected: " + tempSelected.size() + " = " + runningTotal + " KG");
-                System.out.println("│ Remaining needed from Loose Piece: " + remainingQty + " KG");
-
-                // Add loose pieces for remaining (FIFO)
-                BigDecimal looseTotal = BigDecimal.ZERO;
-                List<java.util.Map<String, Object>> looseSelected = new ArrayList<>();
-
-                for (java.util.Map<String, Object> looseBundle : loosePieceBundles) {
-                    BigDecimal looseQty = getBundleQtyKg.apply(looseBundle);
-                    looseSelected.add(looseBundle);
-                    looseTotal = looseTotal.add(looseQty);
-                    System.out.println("│ + Loose Bundle " + looseBundle.get("bundleId") + " | " + looseQty + " KG | Loose Total: " + looseTotal + " KG");
-
-                    if (looseTotal.compareTo(remainingQty) >= 0) {
-                        break;
-                    }
-                }
-
-                BigDecimal combinedTotal = runningTotal.add(looseTotal);
-
-                if (combinedTotal.compareTo(lowerTolerance) >= 0) {
-                    System.out.println("│ ✅ CRITERIA 4 MATCHED!");
-                    System.out.println("│    Warehouse: " + runningTotal + " KG + Loose Piece: " + looseTotal + " KG = " + combinedTotal + " KG");
-                    System.out.println("│    → Selecting from WAREHOUSE + LOOSE PIECE");
-
-                    selectedBundles.addAll(tempSelected);
-                    selectedBundles.addAll(looseSelected);
-                    totalSelectedQtyKg = combinedTotal;
-                    storageType = "WAREHOUSE_PLUS_LOOSE_PIECE";
-                    selectionReason = "Sum outside tolerance → Warehouse (" + runningTotal + " KG) + Loose Piece (" + looseTotal + " KG) = " + combinedTotal + " KG (FIFO)";
-                    selectionDone = true;
-                } else {
-                    System.out.println("│ ❌ Combined total (" + combinedTotal + " KG) < lower tolerance (" + lowerTolerance + " KG)");
-                }
-            } else {
-                System.out.println("│ ❌ No warehouse bundles selected under required qty");
-            }
-        } else if (!selectionDone) {
-            System.out.println("│ ⏭️ SKIPPED: Already selected or no loose pieces available");
-        }
-        System.out.println("│ Status: " + (selectionDone ? "✅ SELECTION DONE" : "➡️ Continue to next criteria"));
-        System.out.println("└──────────────────────────────────────────────────────────────────────────────┘");
-
-        // ═══════════════════════════════════════════════════════════════════════════════════════════
-        // CRITERIA 5: Sum outside tolerance, NO Loose Piece → WAREHOUSE (fulfill required)
-        // ═══════════════════════════════════════════════════════════════════════════════════════════
-        System.out.println("\n┌─ CRITERIA 5: Warehouse Only (No Loose Piece)? ───────────────────────────────┐");
-        System.out.println("│ Condition: Sum outside tolerance, No Loose Piece available                   │");
-        System.out.println("│ Action   : Select bundles to fulfill required from WAREHOUSE                 │");
-        System.out.println("├──────────────────────────────────────────────────────────────────────────────┤");
-
-        if (!selectionDone && totalWithQR.compareTo(requiredQtyKg) >= 0) {
-            BigDecimal runningTotal = BigDecimal.ZERO;
-            List<java.util.Map<String, Object>> tempSelected = new ArrayList<>();
-
-            for (java.util.Map<String, Object> bundle : warehouseBundles) {
-                BigDecimal bundleQty = getBundleQtyKg.apply(bundle);
-                runningTotal = runningTotal.add(bundleQty);
-                tempSelected.add(bundle);
-                System.out.println("│ + Bundle " + bundle.get("bundleId") + " | " + bundleQty + " KG | Running Total: " + runningTotal + " KG");
-
-                if (runningTotal.compareTo(requiredQtyKg) >= 0) {
-                    break;
-                }
-            }
-
-            if (runningTotal.compareTo(requiredQtyKg) >= 0) {
-                System.out.println("│ ✅ CRITERIA 5 MATCHED!");
-                System.out.println("│    Selected " + tempSelected.size() + " bundles = " + runningTotal + " KG");
-                System.out.println("│    → Selecting from WAREHOUSE to fulfill required quantity");
-
-                selectedBundles.addAll(tempSelected);
-                totalSelectedQtyKg = runningTotal;
-                storageType = "WAREHOUSE";
-                selectionReason = "Sum outside tolerance, no Loose Piece → Selected " + tempSelected.size() + " bundles (" + runningTotal + " KG) from Warehouse (FIFO)";
-                selectionDone = true;
-            } else {
-                System.out.println("│ ❌ Could not reach required qty. Running total: " + runningTotal + " KG");
-            }
-        } else if (!selectionDone) {
-            System.out.println("│ ⏭️ SKIPPED: Already selected or insufficient stock");
-        }
-        System.out.println("│ Status: " + (selectionDone ? "✅ SELECTION DONE" : "➡️ Continue to next criteria"));
-        System.out.println("└──────────────────────────────────────────────────────────────────────────────┘");
-
-        // ═══════════════════════════════════════════════════════════════════════════════════════════
-        // CRITERIA 6: Stock with QR < Required Qty → WAREHOUSE + LOOSE PIECE + COMMON
-        // (Use all available with QR + remaining from Common without QR)
-        // ═══════════════════════════════════════════════════════════════════════════════════════════
-        System.out.println("\n┌─ CRITERIA 6: Warehouse + Loose Piece + Common (No QR)? ──────────────────────┐");
-        System.out.println("│ Condition: Stock with QR < Required, Common available for remaining          │");
-        System.out.println("│ Action   : Use all with QR + remaining from COMMON (without QR)              │");
-        System.out.println("├──────────────────────────────────────────────────────────────────────────────┤");
-
-        if (!selectionDone && totalWithQR.compareTo(requiredQtyKg) < 0 && grandTotal.compareTo(requiredQtyKg) >= 0) {
-            System.out.println("│ Total with QR: " + totalWithQR + " KG < Required: " + requiredQtyKg + " KG");
-            System.out.println("│ Common stock available: " + totalCommonQty + " KG");
-            System.out.println("│ Grand Total: " + grandTotal + " KG >= Required: " + requiredQtyKg + " KG");
-
-            // Add all warehouse bundles
-            System.out.println("│ Adding ALL Warehouse bundles (" + warehouseBundles.size() + "):");
-            for (java.util.Map<String, Object> b : warehouseBundles) {
-                System.out.println("│   ➕ Bundle " + b.get("bundleId") + " | " + getBundleQtyKg.apply(b) + " KG");
-            }
-            selectedBundles.addAll(warehouseBundles);
-            totalSelectedQtyKg = totalWarehouseQty;
-
-            // Add all loose piece bundles
-            System.out.println("│ Adding ALL Loose Piece bundles (" + loosePieceBundles.size() + "):");
-            for (java.util.Map<String, Object> b : loosePieceBundles) {
-                System.out.println("│   ➕ Bundle " + b.get("bundleId") + " | " + getBundleQtyKg.apply(b) + " KG");
-            }
-            selectedBundles.addAll(loosePieceBundles);
-            totalSelectedQtyKg = totalSelectedQtyKg.add(totalLoosePieceQty);
-
-            BigDecimal remainingFromCommon = requiredQtyKg.subtract(totalSelectedQtyKg);
-            System.out.println("│ After Warehouse + Loose: " + totalSelectedQtyKg + " KG");
-            System.out.println("│ Remaining from Common: " + remainingFromCommon + " KG");
-
-            // Add common entries for remaining (FIFO)
-            BigDecimal commonUsed = BigDecimal.ZERO;
-            System.out.println("│ Adding from Common (without QR):");
-            for (java.util.Map<String, Object> commonEntry : commonBundles) {
-                BigDecimal commonQty = getBundleQtyKg.apply(commonEntry);
-                selectedBundles.add(commonEntry);
-                commonUsed = commonUsed.add(commonQty);
-                totalSelectedQtyKg = totalSelectedQtyKg.add(commonQty);
-                System.out.println("│   ➕ Common Entry " + commonEntry.get("bundleId") + " | " + commonQty + " KG | Total: " + totalSelectedQtyKg + " KG");
-
-                if (totalSelectedQtyKg.compareTo(requiredQtyKg) >= 0) {
-                    break;
-                }
-            }
-
-            System.out.println("│ ✅ CRITERIA 6 MATCHED!");
-            System.out.println("│    Total selected: " + totalSelectedQtyKg + " KG");
-            System.out.println("│    → WAREHOUSE + LOOSE PIECE + COMMON");
-
-            storageType = "WAREHOUSE_PLUS_LOOSE_PIECE_PLUS_COMMON";
-            selectionReason = "Stock with QR (" + totalWithQR + " KG) < Required (" + requiredQtyKg + " KG) → Used Warehouse + Loose Piece + Common (" + commonUsed + " KG without QR)";
-            selectionDone = true;
-        } else if (!selectionDone) {
-            System.out.println("│ ⏭️ SKIPPED: Already selected or insufficient grand total");
-        }
-        System.out.println("│ Status: " + (selectionDone ? "✅ SELECTION DONE" : "➡️ Continue to next criteria"));
-        System.out.println("└──────────────────────────────────────────────────────────────────────────────┘");
-
-        // ═══════════════════════════════════════════════════════════════════════════════════════════
-        // CRITERIA 7: NO Stock with QR available → COMMON only (without QR)
-        // ═══════════════════════════════════════════════════════════════════════════════════════════
-        System.out.println("\n┌─ CRITERIA 7: Common Only (No QR Stock)? ────────────────────────────────────┐");
-        System.out.println("│ Condition: No stock with QR available, Common stock >= Required              │");
-        System.out.println("│ Action   : Select from COMMON only (without QR)                              │");
-        System.out.println("├──────────────────────────────────────────────────────────────────────────────┤");
-
-        if (!selectionDone && totalWithQR.compareTo(BigDecimal.ZERO) == 0 && totalCommonQty.compareTo(requiredQtyKg) >= 0) {
-            System.out.println("│ No stock with QR available (Total with QR = 0)");
-            System.out.println("│ Common stock: " + totalCommonQty + " KG >= Required: " + requiredQtyKg + " KG");
-
-            BigDecimal runningTotal = BigDecimal.ZERO;
-            for (java.util.Map<String, Object> commonEntry : commonBundles) {
-                BigDecimal commonQty = getBundleQtyKg.apply(commonEntry);
-                selectedBundles.add(commonEntry);
-                runningTotal = runningTotal.add(commonQty);
-                System.out.println("│ + Common Entry " + commonEntry.get("bundleId") + " | " + commonQty + " KG | Running Total: " + runningTotal + " KG");
-
-                if (runningTotal.compareTo(requiredQtyKg) >= 0) {
-                    break;
-                }
-            }
-
-            totalSelectedQtyKg = runningTotal;
-
-            System.out.println("│ ✅ CRITERIA 7 MATCHED!");
-            System.out.println("│    Selected: " + runningTotal + " KG from Common (without QR)");
-            System.out.println("│    → WAREHOUSE (COMMON) only");
-
-            storageType = "WAREHOUSE_COMMON";
-            selectionReason = "No stock with QR available → Selected " + runningTotal + " KG from Common (without QR) - FIFO";
-            selectionDone = true;
-        } else if (!selectionDone) {
-            System.out.println("│ ⏭️ SKIPPED: Stock with QR available or insufficient common stock");
-        }
-        System.out.println("│ Status: " + (selectionDone ? "✅ SELECTION DONE" : "❌ NO STOCK AVAILABLE"));
-        System.out.println("└──────────────────────────────────────────────────────────────────────────────┘");
-
-        // ═══════════════════════════════════════════════════════════════════════════════════════════
-        // NO STOCK AVAILABLE
-        // ═══════════════════════════════════════════════════════════════════════════════════════════
-        if (!selectionDone) {
-            System.out.println("\n┌─ ❌ NO SUITABLE STOCK AVAILABLE ─────────────────────────────────────────────┐");
-            System.out.println("│ Required: " + requiredQtyKg + " KG");
-            System.out.println("│ Total Available: " + grandTotal + " KG");
-            System.out.println("│ Total with QR: " + totalWithQR + " KG");
-            System.out.println("│ Total Common: " + totalCommonQty + " KG");
-            System.out.println("└──────────────────────────────────────────────────────────────────────────────┘");
-
-            storageType = "NO_STOCK_AVAILABLE";
-            selectionReason = "No suitable stock available. Required: " + requiredQtyKg + " KG, Available: " + grandTotal + " KG";
-        }
-
-        // ═══════════════════════════════════════════════════════════════════════════════════════════
-        // FINAL SELECTION SUMMARY
-        // ═══════════════════════════════════════════════════════════════════════════════════════════
-        System.out.println("\n╔══════════════════════════════════════════════════════════════════════════════╗");
-        System.out.println("║            📋 SELECTION COMPLETE - FULL ORDER                               ║");
-        System.out.println("╠══════════════════════════════════════════════════════════════════════════════╣");
-        System.out.println("║ Storage Type    : " + storageType);
-        System.out.println("║ Bundles Selected: " + selectedBundles.size());
-        System.out.println("║ Total Qty (KG)  : " + totalSelectedQtyKg);
-        System.out.println("║ Required Qty    : " + requiredQtyKg + " KG");
-        System.out.println("║ Reason          : " + selectionReason);
-        System.out.println("╚══════════════════════════════════════════════════════════════════════════════╝");
+        List<java.util.Map<String, Object>> selectedBundles = fifoResult.getSelectedBundles();
+        String storageType = fifoResult.getStorageType();
+        String selectionReason = fifoResult.getSelectionReason();
+        BigDecimal totalSelectedQtyKg = fifoResult.getTotalSelectedQtyKg();
+        boolean selectionDone = fifoResult.isSelectionDone();
 
         System.out.println("\n┌─ SELECTED BUNDLES (FIFO Order) ─────────────────────────────────────────────┐");
 
-        // ═══════════════════════════════════════════════════════════════════════════════════════════
+
         // BUILD RESPONSE
         // ═══════════════════════════════════════════════════════════════════════════════════════════
         java.util.Map<String, Object> responseData = new java.util.LinkedHashMap<>();
@@ -1323,6 +930,11 @@ public class SalesOrderSchedulerServiceImpl implements SalesOrderSchedulerServic
         responseData.put("soNumber", dto.getSoNumber());
         responseData.put("lineNumber", dto.getLineNumber());
         responseData.put("orderType", dto.getOrderType());
+        responseData.put("nextProcess", dto.getNextProcess());
+        responseData.put("productCategory", dto.getProductCategory());
+        responseData.put("brand", dto.getBrand());
+        responseData.put("grade", dto.getGrade());
+        responseData.put("temper", dto.getTemper());
         responseData.put("requiredQuantityKg", dto.getRequiredQuantityKg());
         responseData.put("requiredQuantityNo", dto.getRequiredQuantityNo());
         responseData.put("racks", rackDetailsMap);
@@ -2000,24 +1612,57 @@ public class SalesOrderSchedulerServiceImpl implements SalesOrderSchedulerServic
         System.out.println("      - Higher Dim Bundles: " + higherDimBundles.size());
 
         // ═══════════════════════════════════════════════════════════════════════════════════
-        // STEP 4: APPLY CUT SELECTION LOGIC
+        // FRD 4A.2A — CUT ORDER FIFO PICKLIST ALLOCATION ENGINE
         // ═══════════════════════════════════════════════════════════════════════════════════
         System.out.println("\n   ═══════════════════════════════════════════════════════════════════════");
-        System.out.println("   ║ STEP 4: APPLYING CUT SELECTION LOGIC                                ║");
+        System.out.println("   ║ APPLYING CUT ORDER ENGINE (FRD 4A.2A 4-STEP ALGORITHM)              ║");
         System.out.println("   ═══════════════════════════════════════════════════════════════════════");
 
+        // Categorize ALL fetched bundles by store type for the CUT engine
+        List<java.util.Map<String, Object>> endPieceBundles = new ArrayList<>();
+        List<java.util.Map<String, Object>> loosePieceBundles = new ArrayList<>();
+        List<java.util.Map<String, Object>> warehouseCutBundles = new ArrayList<>();
+
+        // Both exact match and higher dim bundles are eligible — the engine handles their categorization
+        List<java.util.Map<String, Object>> allEligibleBundles = new ArrayList<>();
+        allEligibleBundles.addAll(exactMatchBundles);
+        allEligibleBundles.addAll(higherDimBundles);
+
+        for (java.util.Map<String, Object> bundle : allEligibleBundles) {
+            String storeType = (String) bundle.getOrDefault("storeType", "");
+            if ("End Piece".equalsIgnoreCase(storeType)) {
+                endPieceBundles.add(bundle);
+            } else if ("Loose Piece".equalsIgnoreCase(storeType)) {
+                loosePieceBundles.add(bundle);
+            } else {
+                warehouseCutBundles.add(bundle);
+            }
+        }
+
+        System.out.println("   📊 Engine Input:");
+        System.out.println("      - End Pieces: " + endPieceBundles.size());
+        System.out.println("      - Loose Pieces: " + loosePieceBundles.size());
+        System.out.println("      - Warehouse: " + warehouseCutBundles.size());
+
+        BigDecimal[] requiredDimArray = new BigDecimal[]{finalReqDim1, finalReqDim2, finalReqDim3};
+
+        com.indona.invento.services.helpers.FifoResult cutResult =
+                com.indona.invento.services.helpers.CutOrderPicklistEngine.allocate(
+                        requiredQtyKg, endPieceBundles, loosePieceBundles, warehouseCutBundles,
+                        requiredDimArray, finalProductCategory);
+
+        List<java.util.Map<String, Object>> selectedBundles = cutResult.getSelectedBundles();
+        String storageType = cutResult.getStorageType();
+        String selectionReason = cutResult.getSelectionReason();
+        BigDecimal totalSelectedQtyKg = cutResult.getTotalSelectedQtyKg();
+        boolean selectionDone = cutResult.isSelectionDone();
+
+        // Helper function for bundle quantity extraction in CUT method
         java.util.function.Function<java.util.Map<String, Object>, BigDecimal> getBundleQtyKg = bundle -> {
             Object qty = bundle.get("quantityKg");
             return qty instanceof BigDecimal ? (BigDecimal) qty :
                    (qty instanceof Number ? BigDecimal.valueOf(((Number) qty).doubleValue()) : BigDecimal.ZERO);
         };
-
-        List<java.util.Map<String, Object>> selectedBundles = new ArrayList<>();
-        String storageType = "";
-        String selectionReason = "";
-        BigDecimal totalSelectedQtyKg = BigDecimal.ZERO;
-        List<String> usedStores = new ArrayList<>();
-        boolean selectionDone = false;
 
         // Calculate totals
         BigDecimal totalExactMatchQty = exactMatchBundles.stream().map(getBundleQtyKg).reduce(BigDecimal.ZERO, BigDecimal::add);
@@ -2030,162 +1675,6 @@ public class SalesOrderSchedulerServiceImpl implements SalesOrderSchedulerServic
         System.out.println("   📊 Grand Total: " + grandTotalQty + " KG");
 
         // ═══════════════════════════════════════════════════════════════════════════════════
-        // CASE 1: EXACT DIMENSION MATCH & SUFFICIENT QUANTITY
-        // ═══════════════════════════════════════════════════════════════════════════════════
-        if (!selectionDone && totalExactMatchQty.compareTo(requiredQtyKg) >= 0) {
-            System.out.println("\n   🔍 CASE 1: Exact Dimension Match & Sufficient Quantity");
-
-            for (java.util.Map<String, Object> bundle : exactMatchBundles) {
-                BigDecimal bundleQty = getBundleQtyKg.apply(bundle);
-                selectedBundles.add(bundle);
-                totalSelectedQtyKg = totalSelectedQtyKg.add(bundleQty);
-
-                String bundleStore = (String) bundle.get("storeType");
-                if (bundleStore != null && !usedStores.contains(bundleStore)) {
-                    usedStores.add(bundleStore);
-                }
-
-                if (totalSelectedQtyKg.compareTo(requiredQtyKg) >= 0) {
-                    break;
-                }
-            }
-
-            storageType = String.join(" + ", usedStores);
-            selectionReason = "CASE 1: Exact dimension match (" + dto.getDimension() + ") with sufficient quantity → Selected " +
-                    selectedBundles.size() + " bundle(s) = " + totalSelectedQtyKg + " KG from " + storageType + " (FIFO)";
-            selectionDone = true;
-            System.out.println("      ✅ " + selectionReason);
-        }
-
-        // ═══════════════════════════════════════════════════════════════════════════════════
-        // CASE 2: EXACT DIMENSION MATCH BUT QUANTITY INSUFFICIENT
-        // ═══════════════════════════════════════════════════════════════════════════════════
-        if (!selectionDone && !exactMatchBundles.isEmpty() && totalExactMatchQty.compareTo(requiredQtyKg) < 0) {
-            System.out.println("\n   🔍 CASE 2: Exact Dimension Match but Quantity Insufficient");
-            System.out.println("      Exact Match: " + totalExactMatchQty + " KG < Required: " + requiredQtyKg + " KG");
-
-            // Add all exact match bundles first
-            for (java.util.Map<String, Object> bundle : exactMatchBundles) {
-                BigDecimal bundleQty = getBundleQtyKg.apply(bundle);
-                selectedBundles.add(bundle);
-                totalSelectedQtyKg = totalSelectedQtyKg.add(bundleQty);
-
-                String bundleStore = (String) bundle.get("storeType");
-                if (bundleStore != null && !usedStores.contains(bundleStore)) {
-                    usedStores.add(bundleStore);
-                }
-            }
-
-            // Then add higher dimension bundles for remaining
-            if (totalSelectedQtyKg.compareTo(requiredQtyKg) < 0 && !higherDimBundles.isEmpty()) {
-                System.out.println("      Adding higher dimension bundles for remaining...");
-
-                for (java.util.Map<String, Object> bundle : higherDimBundles) {
-                    BigDecimal bundleQty = getBundleQtyKg.apply(bundle);
-                    selectedBundles.add(bundle);
-                    totalSelectedQtyKg = totalSelectedQtyKg.add(bundleQty);
-
-                    String bundleStore = (String) bundle.get("storeType");
-                    if (bundleStore != null && !usedStores.contains(bundleStore)) {
-                        usedStores.add(bundleStore);
-                    }
-
-                    if (totalSelectedQtyKg.compareTo(requiredQtyKg) >= 0) {
-                        break;
-                    }
-                }
-            }
-
-            storageType = String.join(" + ", usedStores);
-            selectionReason = "CASE 2: Exact match insufficient (" + totalExactMatchQty + " KG) + Higher dim bundles → Total " +
-                    totalSelectedQtyKg + " KG from " + storageType + " (FIFO)";
-            selectionDone = true;
-            System.out.println("      ✅ " + selectionReason);
-        }
-
-        // ═══════════════════════════════════════════════════════════════════════════════════
-        // CASE 3: DIMENSION NOT MATCHING BUT HIGHER SIZE AVAILABLE
-        // ═══════════════════════════════════════════════════════════════════════════════════
-        if (!selectionDone && exactMatchBundles.isEmpty() && totalHigherDimQty.compareTo(requiredQtyKg) >= 0) {
-            System.out.println("\n   🔍 CASE 3: No Exact Match but Higher Size Available");
-
-            for (java.util.Map<String, Object> bundle : higherDimBundles) {
-                BigDecimal bundleQty = getBundleQtyKg.apply(bundle);
-                selectedBundles.add(bundle);
-                totalSelectedQtyKg = totalSelectedQtyKg.add(bundleQty);
-
-                String bundleStore = (String) bundle.get("storeType");
-                if (bundleStore != null && !usedStores.contains(bundleStore)) {
-                    usedStores.add(bundleStore);
-                }
-
-                if (totalSelectedQtyKg.compareTo(requiredQtyKg) >= 0) {
-                    break;
-                }
-            }
-
-            storageType = String.join(" + ", usedStores);
-            selectionReason = "CASE 3: No exact match → Selected higher dimension stock = " +
-                    totalSelectedQtyKg + " KG from " + storageType + " (Ascending dimension, FIFO)";
-            selectionDone = true;
-            System.out.println("      ✅ " + selectionReason);
-        }
-
-        // ═══════════════════════════════════════════════════════════════════════════════════
-        // PARTIAL SELECTION - Not enough stock
-        // ═══════════════════════════════════════════════════════════════════════════════════
-        if (!selectionDone && grandTotalQty.compareTo(BigDecimal.ZERO) > 0) {
-            System.out.println("\n   ⚠️ PARTIAL: Not enough suitable stock available");
-
-            // Add all available bundles
-            for (java.util.Map<String, Object> bundle : exactMatchBundles) {
-                selectedBundles.add(bundle);
-                totalSelectedQtyKg = totalSelectedQtyKg.add(getBundleQtyKg.apply(bundle));
-                String bundleStore = (String) bundle.get("storeType");
-                if (bundleStore != null && !usedStores.contains(bundleStore)) {
-                    usedStores.add(bundleStore);
-                }
-            }
-            for (java.util.Map<String, Object> bundle : higherDimBundles) {
-                selectedBundles.add(bundle);
-                totalSelectedQtyKg = totalSelectedQtyKg.add(getBundleQtyKg.apply(bundle));
-                String bundleStore = (String) bundle.get("storeType");
-                if (bundleStore != null && !usedStores.contains(bundleStore)) {
-                    usedStores.add(bundleStore);
-                }
-            }
-
-            storageType = usedStores.isEmpty() ? "PARTIAL" : String.join(" + ", usedStores);
-            selectionReason = "PARTIAL SELECTION: Only " + totalSelectedQtyKg + " KG available (Required: " + requiredQtyKg + " KG)";
-            selectionDone = true;
-        }
-
-        // ═══════════════════════════════════════════════════════════════════════════════════
-        // CASE 4: NO SUITABLE STOCK (DO NOT RECOMMEND)
-        // ═══════════════════════════════════════════════════════════════════════════════════
-        if (!selectionDone || selectedBundles.isEmpty()) {
-            System.out.println("\n   ❌ NO SUITABLE STOCK AVAILABLE");
-            storageType = "NO_STOCK_AVAILABLE";
-
-            if (!doNotRecommendStocks.isEmpty()) {
-                selectionReason = "CASE 4: DO NOT RECOMMEND - All available stock has smaller dimensions than required. " +
-                        doNotRecommendStocks.size() + " stock(s) rejected.";
-            } else {
-                selectionReason = "No suitable stock found matching dimension criteria.";
-            }
-        }
-
-        // Final sort by FIFO
-        selectedBundles.sort(fifoComparator);
-
-        System.out.println("\n   ═══════════════════════════════════════════════════════════════════════");
-        System.out.println("   ║ SELECTION COMPLETE                                                  ║");
-        System.out.println("   ═══════════════════════════════════════════════════════════════════════");
-        System.out.println("   📦 Storage Type: " + storageType);
-        System.out.println("   📦 Selected Bundles: " + selectedBundles.size());
-        System.out.println("   📦 Total Selected Qty: " + totalSelectedQtyKg + " KG");
-        System.out.println("   📋 Reason: " + selectionReason);
-
         // Build detailed bundle breakdown
         List<java.util.Map<String, Object>> bundleBreakdown = new ArrayList<>();
         int totalSelectedQtyNo = 0;
@@ -2236,7 +1725,7 @@ public class SalesOrderSchedulerServiceImpl implements SalesOrderSchedulerServic
         selectionResult.put("totalSelectedQuantityKg", totalSelectedQtyKg);
         selectionResult.put("totalSelectedQuantityNo", totalSelectedQtyNo);
         selectionResult.put("totalBundlesSelected", selectedBundles.size());
-        selectionResult.put("usedStores", usedStores);
+        selectionResult.put("usedStores", List.of(storageType));
         selectionResult.put("requiredDimension", java.util.Map.of(
                 "dim1", finalReqDim1,
                 "dim2", finalReqDim2,
@@ -2273,6 +1762,10 @@ public class SalesOrderSchedulerServiceImpl implements SalesOrderSchedulerServic
         responseData.put("unit", dto.getUnit());
         responseData.put("itemDescription", dto.getItemDescription());
         responseData.put("productCategory", dto.getProductCategory());
+        responseData.put("nextProcess", dto.getNextProcess());
+        responseData.put("brand", dto.getBrand());
+        responseData.put("grade", dto.getGrade());
+        responseData.put("temper", dto.getTemper());
         responseData.put("soNumber", dto.getSoNumber());
         responseData.put("lineNumber", dto.getLineNumber());
         responseData.put("orderType", dto.getOrderType());
@@ -2599,8 +2092,15 @@ public class SalesOrderSchedulerServiceImpl implements SalesOrderSchedulerServic
                         // STORAGE AREA
                         detail.put("storageArea", parseString(bundle.get("storageArea")));
 
-                        // RACK COLUMN & BIN
-                        detail.put("rackColumnBin", parseString(bundle.get("rack")));
+                        // RACK COLUMN & BIN — try multiple possible field names
+                        String rackValue = parseString(bundle.get("rack"));
+                        if (rackValue == null || rackValue.isBlank()) {
+                            rackValue = parseString(bundle.get("rackColumnBin"));
+                        }
+                        if (rackValue == null || rackValue.isBlank()) {
+                            rackValue = parseString(bundle.get("rackColumnBinNumber"));
+                        }
+                        detail.put("rackColumnBin", rackValue);
 
                         // Retrieval Quantity (Kg)
                         detail.put("retrievalQuantityKg", parseBigDecimal(bundle.get("quantityKg")));
@@ -2608,8 +2108,14 @@ public class SalesOrderSchedulerServiceImpl implements SalesOrderSchedulerServic
                         // Retrieval Quantity (No)
                         detail.put("retrievalQuantityNo", parseInteger(bundle.get("quantityNo")));
 
-                        // Batch number (GRN Ref No)
+                        // Batch number (GRN Ref No) — try multiple possible field names
                         String grnRefNo = parseString(bundle.get("grnRefNo"));
+                        if (grnRefNo == null || grnRefNo.isBlank()) {
+                            grnRefNo = parseString(bundle.get("grnNumber"));
+                        }
+                        if (grnRefNo == null || grnRefNo.isBlank()) {
+                            grnRefNo = parseString(bundle.get("batchNumber"));
+                        }
                         detail.put("batchNumber", grnRefNo);
 
                         // Date of inward - fetch from GRN
@@ -2683,6 +2189,9 @@ public class SalesOrderSchedulerServiceImpl implements SalesOrderSchedulerServic
             response.put("totalQuantityKg", totalQtyKg);
             response.put("totalQuantityNo", totalQtyNo);
             response.put("retrievalStatus", scheduler.getRetrievalStatus());
+            response.put("nextProcess", scheduler.getNextProcess());
+            response.put("orderType", scheduler.getOrderType());
+            response.put("unit", scheduler.getUnit());
             response.put("bundles", bundleDetails);
 
             System.out.println("   ✅ Returning " + bundleDetails.size() + " bundle details");
@@ -3031,6 +2540,10 @@ public class SalesOrderSchedulerServiceImpl implements SalesOrderSchedulerServic
                             // Delete source bundle
                             stockSummaryBundleRepository.delete(sourceBundle);
                             System.out.println("         │    🗑️ Bundle DELETED from Source Stock");
+
+                            // STEP 1.5 — Deduct from Rack & Bin Master
+                            BigDecimal bundleQtyKg = sourceBundle.getWeightmentQuantityKg();
+                            deductFromRackBinMaster(sourceRack, sourceStorageArea, sourceStore, scheduler.getUnit(), bundleQtyKg);
                         } else {
                             System.out.println("         │ ⚠️ Bundle not found with ID: " + sourceBundleId);
                         }
@@ -3164,6 +2677,10 @@ public class SalesOrderSchedulerServiceImpl implements SalesOrderSchedulerServic
                                 // Delete ONLY the matched bundle
                                 stockSummaryBundleRepository.delete(matchedBundle);
                                 System.out.println("         │    🗑️ Bundle DELETED (ID: " + matchedBundle.getId() + ")");
+
+                                // STEP 1.5 — Deduct from Rack & Bin Master
+                                BigDecimal matchedBundleQtyKg = matchedBundle.getWeightmentQuantityKg();
+                                deductFromRackBinMaster(sourceRack, sourceStorageArea, sourceStore, scheduler.getUnit(), matchedBundleQtyKg);
                             } else {
                                 System.out.println("         │ ⚠️ No bundle found to process");
                             }
@@ -3328,6 +2845,9 @@ public class SalesOrderSchedulerServiceImpl implements SalesOrderSchedulerServic
                             System.out.println("         │    ✅ Bundle SAVED to Destination - ID: " + savedBundle.getId());
                             System.out.println("         │       - Linked to Stock Summary ID: " + savedExisting.getId());
                             System.out.println("         │       - Weighment Qty: " + weighmentQtyKg + " KG");
+
+                            // STEP 2.5 — Add to Rack & Bin Master (Common Bin)
+                            addToRackBinMasterCommonBin(targetRackBin, targetStorageArea, targetStore, scheduler.getUnit(), weighmentQtyKg);
                         }
 
                     } else {
@@ -3435,6 +2955,9 @@ public class SalesOrderSchedulerServiceImpl implements SalesOrderSchedulerServic
                             System.out.println("         │    ✅ Bundle SAVED to New Stock - ID: " + savedBundle.getId());
                             System.out.println("         │       - Linked to Stock Summary ID: " + savedStock.getId());
                             System.out.println("         │       - Weighment Qty: " + weighmentQtyKg + " KG");
+
+                            // STEP 2.5 — Add to Rack & Bin Master (Common Bin)
+                            addToRackBinMasterCommonBin(targetRackBin, targetStorageArea, targetStore, scheduler.getUnit(), weighmentQtyKg);
                         }
                     }
 
@@ -3712,4 +3235,81 @@ public class SalesOrderSchedulerServiceImpl implements SalesOrderSchedulerServic
         return response;
     }
 
+    // ═══════════════════════════════════════════════════════════════════════════════
+    // HELPER: Deduct quantity from Rack & Bin Master (source rack, skips Common)
+    // ═══════════════════════════════════════════════════════════════════════════════
+    private void deductFromRackBinMaster(String rackColumnBin, String storageArea, String store, String unit, BigDecimal qtyKg) {
+        try {
+            if (rackColumnBin == null || rackColumnBin.isBlank() || "Common".equalsIgnoreCase(rackColumnBin)) {
+                System.out.println("         │    ⏭️ [RackBin-Deduct] SKIP — rackColumnBin is null or Common");
+                return;
+            }
+            if (qtyKg == null || qtyKg.compareTo(BigDecimal.ZERO) <= 0) {
+                System.out.println("         │    ⏭️ [RackBin-Deduct] SKIP — qty is null or zero");
+                return;
+            }
+
+            // Parse rack string: "RackNo-ColumnNo-BinNo"
+            String[] parts = rackColumnBin.split("-");
+            if (parts.length < 3) {
+                System.out.println("         │    ⚠️ [RackBin-Deduct] Cannot parse rack: '" + rackColumnBin + "' (expected R-C-B)");
+                return;
+            }
+            String rackNo = parts[0];
+            String columnNo = parts[1];
+            String binNo = parts[2];
+
+            System.out.println("         │    🔧 [RackBin-Deduct] Searching: store='" + store + "' area='" + storageArea + "' rack='" + rackNo + "' col='" + columnNo + "' bin='" + binNo + "' unit='" + unit + "'");
+
+            Optional<RackBinMasterEntity> rackOpt = rackBinMasterRepository
+                    .findByStorageTypeAndStorageAreaAndRackNoAndColumnNoAndBinNoAndUnitName(
+                            store, storageArea, rackNo, columnNo, binNo, unit);
+
+            if (rackOpt.isPresent()) {
+                RackBinMasterEntity rack = rackOpt.get();
+                double existingStorage = rack.getCurrentStorage() != null ? rack.getCurrentStorage() : 0;
+                double newStorage = Math.max(0, existingStorage - qtyKg.doubleValue());
+                rack.setCurrentStorage(newStorage);
+                rackBinMasterRepository.save(rack);
+                System.out.println("         │    ✅ [RackBin-Deduct] Storage: " + existingStorage + " → " + newStorage + " KG (deducted " + qtyKg + ")");
+            } else {
+                System.out.println("         │    ⚠️ [RackBin-Deduct] Rack not found — skipping");
+            }
+        } catch (Exception e) {
+            System.out.println("         │    ⚠️ [RackBin-Deduct] Error: " + e.getMessage());
+            // Don't fail the parent operation
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════════
+    // HELPER: Add quantity to Rack & Bin Master (Common Bin destination)
+    // ═══════════════════════════════════════════════════════════════════════════════
+    private void addToRackBinMasterCommonBin(String rackColumnBin, String storageArea, String store, String unit, BigDecimal qtyKg) {
+        try {
+            if (qtyKg == null || qtyKg.compareTo(BigDecimal.ZERO) <= 0) {
+                System.out.println("         │    ⏭️ [RackBin-Add] SKIP — qty is null or zero");
+                return;
+            }
+
+            System.out.println("         │    🔧 [RackBin-Add] Searching Common bin: store='" + store + "' binNo='" + rackColumnBin + "' area='" + storageArea + "' unit='" + unit + "'");
+
+            Optional<RackBinMasterEntity> rackOpt = rackBinMasterRepository
+                    .findByStorageTypeAndBinNoAndStorageAreaAndUnitName(
+                            store, rackColumnBin, storageArea, unit);
+
+            if (rackOpt.isPresent()) {
+                RackBinMasterEntity rack = rackOpt.get();
+                double existingStorage = rack.getCurrentStorage() != null ? rack.getCurrentStorage() : 0;
+                double newStorage = existingStorage + qtyKg.doubleValue();
+                rack.setCurrentStorage(newStorage);
+                rackBinMasterRepository.save(rack);
+                System.out.println("         │    ✅ [RackBin-Add] Storage: " + existingStorage + " → " + newStorage + " KG (added " + qtyKg + ")");
+            } else {
+                System.out.println("         │    ⚠️ [RackBin-Add] Common bin not found — skipping");
+            }
+        } catch (Exception e) {
+            System.out.println("         │    ⚠️ [RackBin-Add] Error: " + e.getMessage());
+            // Don't fail the parent operation
+        }
+    }
 }

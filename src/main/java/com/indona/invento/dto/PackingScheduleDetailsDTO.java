@@ -22,5 +22,6 @@ public class PackingScheduleDetailsDTO {
     private String temper;
     private String dimension;
     private String itemDescription;
+    private Boolean packing;
 }
 

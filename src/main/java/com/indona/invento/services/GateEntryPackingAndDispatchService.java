@@ -15,6 +15,8 @@ public interface GateEntryPackingAndDispatchService {
 
 	List<String> getVehicleNumbersWithInStatus();
 
+	List<String> getVehicleNumbersFiltered(String purpose, String mode);
+
 	GateEntryPackingAndDispatch updateGateEntryByRefNo(String refNo, GateEntryUpdateDTO dto);
 
 	GateEntryPackingAndDispatch markVehicleOut(String refNo);

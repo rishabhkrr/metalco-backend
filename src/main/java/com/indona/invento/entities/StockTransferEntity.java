@@ -142,8 +142,25 @@ public class StockTransferEntity {
     @Column(name="rack_column_bin_number")
     private String rackColumnBinNumber;
 
+    // FRD: SUB-006 — Allocation Status (Pending / Completed)
+    @Column(name="allocation_status")
+    private String allocationStatus = "Pending";
+
+    // FRD: SUB-008 — Scan Location verification
+    @Column(name="scan_location_verified")
+    private Boolean scanLocationVerified = false;
+
     @PrePersist
     public void addTimestamp() {
         dateTime = new Date();
+
+        // FRD: STI-007/008 — Auto-set recipientStore based on materialAcceptance
+        if (materialAcceptance != null) {
+            if ("Rejected".equalsIgnoreCase(materialAcceptance)) {
+                recipientStore = "Rejection";
+            } else {
+                recipientStore = "Warehouse";
+            }
+        }
     }
 }

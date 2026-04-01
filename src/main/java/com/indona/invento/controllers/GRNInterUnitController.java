@@ -190,6 +190,17 @@ public class GRNInterUnitController {
     // =========================================================================
 
     /**
+     * FRD: IUMR-002 — Get available MEDCI numbers for GRN Interunit Request
+     * Returns MEDCI from Gate Entry Inward with Mode = "Interunit transfer",
+     * excluding those already entered in this module for the current unit.
+     */
+    @GetMapping("/available-medci")
+    public ResponseEntity<List<String>> getAvailableMedciNumbers(
+            @RequestParam(required = false) String unit) {
+        return ResponseEntity.ok(grnInterUnitService.getAvailableMedciNumbers(unit));
+    }
+
+    /**
      * FRD: Show only MEDCI numbers not already used in this module for the current unit
      */
     @GetMapping("/medci-check")

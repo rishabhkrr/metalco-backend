@@ -39,6 +39,17 @@ public class GateEntryPackingAndDispatchController {
         return ResponseEntity.ok(service.getVehicleNumbersWithInStatus());
     }
 
+    /**
+     * Filtered vehicle dropdown for RFD List Transfer
+     * Returns only vehicles where Status=IN, Purpose=Pickup, Mode=Sales
+     */
+    @GetMapping("/vehicle-dropdown-filtered")
+    public ResponseEntity<List<String>> getVehicleNumbersFiltered(
+            @RequestParam(defaultValue = "Pickup") String purpose,
+            @RequestParam(defaultValue = "Sales") String mode) {
+        return ResponseEntity.ok(service.getVehicleNumbersFiltered(purpose, mode));
+    }
+
     @PutMapping("/gate-entry/update/{refNo}")
     public ResponseEntity<GateEntryPackingAndDispatch> updateGateEntry(
             @PathVariable String refNo,

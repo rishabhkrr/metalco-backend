@@ -167,6 +167,23 @@ public class ProductionScheduleServiceImpl implements ProductionScheduleService 
     }
 
     @Override
+    public List<ProductionScheduleEntity> getAllProductionScheduleByCategory(String productCategory) {
+        return productionScheduleRepository.findAll().stream()
+                .filter(s -> productCategory.equalsIgnoreCase(s.getProductCategory()))
+                .collect(Collectors.toList());
+    }
+
+    @Override
+    public List<String> getDistinctProductCategories() {
+        return productionScheduleRepository.findAll().stream()
+                .map(ProductionScheduleEntity::getProductCategory)
+                .filter(c -> c != null && !c.isBlank())
+                .distinct()
+                .sorted()
+                .collect(Collectors.toList());
+    }
+
+    @Override
     public ProductionScheduleEntity updateProductionSchedule(Long id, ProductionScheduleDto dto) {
         ProductionScheduleEntity entity = productionScheduleRepository.findById(id)
                 .orElseThrow(() -> new EntityNotFoundException("ProductionSchedule id=" + id + " not found"));
